@@ -30,7 +30,7 @@ app.use(cors({
   optionsSuccessStatus: 200
 }));
 
-// Middleware de parsing (Express 4.x style)
+// Middleware de parsing
 app.use(express.json({ 
   limit: '10mb'
 }));

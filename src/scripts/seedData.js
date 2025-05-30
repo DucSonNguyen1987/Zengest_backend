@@ -1,9 +1,9 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const config = require('../config/config');
-const { USER_ROLES } = require('../utils/constants');
-const User = require('../models/User.js');
-const Restaurant = require('../models/Restaurant.js');
+const config = require('./src/config/config');
+const { USER_ROLES } = require('./src/utils/constants');
+const User = require('./src/models/User');
+const Restaurant = require('./src/models/Restaurant');
 
 const seedData = async () => {
   try {
