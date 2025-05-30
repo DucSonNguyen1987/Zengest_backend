@@ -8,6 +8,7 @@ const config = require('./src/config/config');
 // Import des routes
 const authRoutes = require('./src/routes/auth');
 const userRoutes = require('./src/routes/users');
+const restaurantRoutes = require('./src/routes/restaurants');
 
 const app = express();
 
@@ -27,6 +28,15 @@ app.use(cors({
   origin: config.frontendUrl,
   credentials: true,
   optionsSuccessStatus: 200
+}));
+
+// Middleware de parsing (Express 4.x style)
+app.use(express.json({ 
+  limit: '10mb'
+}));
+app.use(express.urlencoded({ 
+  extended: true,
+  limit: '10mb'
 }));
 
 // Rate limiting global
@@ -52,16 +62,6 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
-// Middleware de parsing
-app.use(express.json({ 
-  limit: '10mb',
-  type: 'application/json'
-}));
-app.use(express.urlencoded({ 
-  extended: true,
-  limit: '10mb'
-}));
-
 // Logging
 if (config.nodeEnv === 'development') {
   app.use(morgan('dev'));
@@ -72,6 +72,7 @@ if (config.nodeEnv === 'development') {
 // Routes API
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/restaurants', restaurantRoutes);
 
 // Route de santé/test
 app.get('/api/health', (req, res) => {
@@ -88,12 +89,13 @@ app.get('/api/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'API Restaurant Backend',
+    message: 'API Restaurant Backend - Zengest',
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
       auth: '/api/auth',
-      users: '/api/users'
+      users: '/api/users',
+      restaurants: '/api/restaurants'
     }
   });
 });
@@ -107,7 +109,8 @@ app.use('*', (req, res) => {
       '/api/health',
       '/api/auth/register',
       '/api/auth/login',
-      '/api/users'
+      '/api/users',
+      '/api/restaurants'
     ]
   });
 });

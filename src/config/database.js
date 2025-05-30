@@ -3,8 +3,11 @@ const mongoose = require('mongoose');
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+      // Options recommandées pour Mongoose 8.x
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      family: 4 // Utiliser IPv4, éviter les problèmes IPv6
     });
     
     console.log(`MongoDB Connected: ${conn.connection.host}`);
@@ -16,6 +19,10 @@ const connectDB = async () => {
     
     mongoose.connection.on('error', (err) => {
       console.error('MongoDB connection error:', err);
+    });
+    
+    mongoose.connection.on('reconnected', () => {
+      console.log('MongoDB reconnected');
     });
     
   } catch (error) {

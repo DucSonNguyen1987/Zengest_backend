@@ -1,170 +1,204 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const { USER_ROLES } = require('../utils/constants');
+const express = require('express');
+const User = require('../models/User'); // Import manquant
+const { auth } = require('../middleware/auth');
+const {
+  requireManagement,
+  requireSameRestaurant,
+  canModifyUser
+} = require('../middleware/roleCheck');
+const { validateRegister } = require('../middleware/validation');
 
-const userSchema = new mongoose.Schema({
-  firstName: {
-    type: String,
-    required: [true, 'Le prénom est requis'],
-    trim: true,
-    maxlength: [50, 'Le prénom ne peut dépasser 50 caractères']
-  },
-  
-  lastName: {
-    type: String,
-    required: [true, 'Le nom est requis'],
-    trim: true,
-    maxlength: [50, 'Le nom ne peut dépasser 50 caractères']
-  },
-  
-  email: {
-    type: String,
-    required: [true, 'L\'email est requis'],
-    unique: true,
-    lowercase: true,
-    match: [
-      /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-      'Veuillez entrer un email valide'
-    ]
-  },
-  
-  password: {
-    type: String,
-    required: [true, 'Le mot de passe est requis'],
-    minlength: [6, 'Le mot de passe doit contenir au moins 6 caractères'],
-    select: false
-  },
-  
-  role: {
-    type: String,
-    enum: Object.values(USER_ROLES),
-    default: USER_ROLES.GUEST,
-    required: true
-  },
-  
-  phone: {
-    type: String,
-    match: [/^[0-9+\-\s()]+$/, 'Numéro de téléphone invalide']
-  },
-  
-  address: {
-    street: String,
-    city: String,
-    zipCode: String,
-    country: { type: String, default: 'France' }
-  },
-  
-  restaurantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Restaurant',
-    required: function() {
-      return this.role !== USER_ROLES.ADMIN && this.role !== USER_ROLES.GUEST;
-    }
-  },
-  
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  
-  lastLogin: {
-    type: Date
-  },
-  
-  profileImage: {
-    type: String
-  },
-  
-  preferences: {
-    language: {
-      type: String,
-      default: 'fr',
-      enum: ['fr', 'en', 'es', 'de']
-    },
-    timezone: {
-      type: String,
-      default: 'Europe/Paris'
-    },
-    notifications: {
-      email: { type: Boolean, default: true },
-      push: { type: Boolean, default: true },
-      sms: { type: Boolean, default: false }
-    }
-  },
-  
-  emergencyContact: {
-    name: String,
-    phone: String,
-    relationship: String
-  }
-}, {
-  timestamps: true
-});
+const router = express.Router();
 
-// Index pour améliorer les performances
-userSchema.index({ email: 1 });
-userSchema.index({ role: 1 });
-userSchema.index({ restaurantId: 1 });
-userSchema.index({ isActive: 1 });
+// Toutes les routes nécessitent une authentification
+router.use(auth);
 
-// Middleware pour hasher le mot de passe avant sauvegarde
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
+// GET /api/users - Obtenir tous les utilisateurs (management seulement)
+router.get('/', requireManagement, requireSameRestaurant, async (req, res) => {
   try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
+    const { page = 1, limit = 10, role, isActive } = req.query;
+    
+    const filter = {};
+    
+    // Filtrer par restaurant si pas admin
+    if (req.user.role !== 'admin') {
+      filter.restaurantId = req.user.restaurantId;
+    }
+    
+    // Filtres optionnels
+    if (role) filter.role = role;
+    if (isActive !== undefined) filter.isActive = isActive === 'true';
+    
+    const users = await User.find(filter)
+      .populate('restaurantId', 'name')
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .sort({ createdAt: -1 })
+      .select('-password');
+    
+    const total = await User.countDocuments(filter);
+    
+    res.json({
+      success: true,
+      data: {
+        users,
+        totalPages: Math.ceil(total / limit),
+        currentPage: page,
+        total
+      }
+    });
+    
   } catch (error) {
-    next(error);
+    console.error('Erreur lors de la récupération des utilisateurs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
   }
 });
 
-// Méthode pour comparer les mots de passe
-userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-// Méthode pour obtenir le nom complet
-userSchema.virtual('fullName').get(function() {
-  return `${this.firstName} ${this.lastName}`;
+// GET /api/users/:id - Obtenir un utilisateur spécifique
+router.get('/:id', canModifyUser, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .populate('restaurantId', 'name address')
+      .select('-password');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: { user: user.toPublicJSON() }
+    });
+    
+  } catch (error) {
+    console.error('Erreur lors de la récupération de l\'utilisateur:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
 });
 
-// Méthode pour obtenir les informations publiques
-userSchema.methods.toPublicJSON = function() {
-  const user = this.toObject();
-  delete user.password;
-  return user;
-};
-
-// Méthode pour vérifier si l'utilisateur est staff
-userSchema.methods.isStaff = function() {
-  return [
-    USER_ROLES.STAFF_BAR,
-    USER_ROLES.STAFF_FLOOR,
-    USER_ROLES.STAFF_KITCHEN
-  ].includes(this.role);
-};
-
-// Méthode pour vérifier si l'utilisateur peut gérer d'autres utilisateurs
-userSchema.methods.canManageUsers = function() {
-  return [
-    USER_ROLES.ADMIN,
-    USER_ROLES.OWNER,
-    USER_ROLES.MANAGER
-  ].includes(this.role);
-};
-
-// Méthode pour obtenir le type de staff
-userSchema.methods.getStaffType = function() {
-  if (!this.isStaff()) return null;
-  
-  switch(this.role) {
-    case USER_ROLES.STAFF_BAR: return 'bar';
-    case USER_ROLES.STAFF_FLOOR: return 'floor';
-    case USER_ROLES.STAFF_KITCHEN: return 'kitchen';
-    default: return null;
+// POST /api/users - Créer un nouvel utilisateur (management seulement)
+router.post('/', requireManagement, validateRegister, async (req, res) => {
+  try {
+    // Assigner automatiquement le restaurant si pas admin
+    if (req.user.role !== 'admin' && !req.body.restaurantId) {
+      req.body.restaurantId = req.user.restaurantId;
+    }
+    
+    const user = await User.create(req.body);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Utilisateur créé avec succès',
+      data: { user: user.toPublicJSON() }
+    });
+    
+  } catch (error) {
+    console.error('Erreur lors de la création de l\'utilisateur:', error);
+    
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Un utilisateur avec cet email existe déjà'
+      });
+    }
+    
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Erreur lors de la création'
+    });
   }
-};
+});
 
-module.exports = mongoose.model('User', userSchema);
+// PUT /api/users/:id - Mettre à jour un utilisateur
+router.put('/:id', canModifyUser, async (req, res) => {
+  try {
+    const allowedFields = ['firstName', 'lastName', 'phone', 'address', 'preferences', 'isActive'];
+    
+    // Seuls les managers+ peuvent modifier le rôle et le statut
+    if (req.user.canManageUsers()) {
+      allowedFields.push('role', 'isActive', 'restaurantId');
+    }
+    
+    const updates = {};
+    Object.keys(req.body).forEach(key => {
+      if (allowedFields.includes(key)) {
+        updates[key] = req.body[key];
+      }
+    });
+    
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { new: true, runValidators: true }
+    ).populate('restaurantId', 'name');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Utilisateur mis à jour avec succès',
+      data: { user: user.toPublicJSON() }
+    });
+    
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Erreur lors de la mise à jour'
+    });
+  }
+});
+
+// DELETE /api/users/:id - Supprimer un utilisateur (soft delete)
+router.delete('/:id', requireManagement, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
+    
+    // Empêcher la suppression de son propre compte
+    if (user._id.toString() === req.user._id.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vous ne pouvez pas supprimer votre propre compte'
+      });
+    }
+    
+    // Soft delete - désactiver le compte
+    user.isActive = false;
+    await user.save();
+    
+    res.json({
+      success: true,
+      message: 'Utilisateur désactivé avec succès'
+    });
+    
+  } catch (error) {
+    console.error('Erreur lors de la suppression:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+module.exports = router;

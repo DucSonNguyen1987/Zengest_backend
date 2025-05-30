@@ -1,20 +1,29 @@
 {
-  "name": "backend",
+  "name": "zengest-backend",
   "version": "1.0.0",
+  "description": "Backend API pour l'application de gestion de restaurant Zengest",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "dev:legacy": "nodemon server.js",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "seed": "node src/scripts/seedData.js",
+    "seed:dev": "NODE_ENV=development node src/scripts/seedData.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "restaurant",
+    "api",
+    "nodejs",
+    "express",
+    "mongodb",
+    "jwt",
+    "gestion"
+  ],
+  "author": "Zengest Team",
   "license": "ISC",
-  "description": "",
   "dependencies": {
-    "backend": "file:",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
@@ -24,7 +33,8 @@
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.15.1",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "zengest-backend": "file:"
   },
   "devDependencies": {
     "jest": "^29.7.0",
