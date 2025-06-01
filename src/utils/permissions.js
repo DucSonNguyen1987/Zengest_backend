@@ -88,8 +88,8 @@ const canAccessRestaurant = (userRole, userRestaurantId, targetRestaurantId) => 
   }
   
   // Les autres utilisateurs ne peuvent accéder qu'à leur restaurant
-  return userRestaurantId?.toString() === targetRestaurantId?.toString();
-};
+const userRestId = typeof userRestaurantId === 'object' ? userRestaurantId._id : userRestaurantId;
+  return userRestId?.toString() === targetRestaurantId?.toString();};
 
 module.exports = {
   ROLE_PERMISSIONS,

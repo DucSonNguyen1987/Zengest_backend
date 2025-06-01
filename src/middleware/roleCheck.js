@@ -1,5 +1,6 @@
 const { hasPermission, canAccessRestaurant } = require('../utils/permissions');
 const { USER_ROLES } = require('../utils/constants');
+const { message } = require('antd');
 
 // Middleware pour vérifier les rôles spécifiques
 const requireRole = (...roles) => {
@@ -48,7 +49,14 @@ const requirePermission = (permission) => {
 
 // Middleware pour vérifier que l'utilisateur appartient au même restaurant
 const requireSameRestaurant = (req, res, next) => {
+  console.log('🏢 DEBUG requireSameRestaurant:', {
+    userRole: req.user?.role,
+    userRestaurantId: req.user?.restaurantId?.toString(),
+    isAdmin: req.user?.role === USER_ROLES.ADMIN
+  });
+
   if (!req.user) {
+    console.log('❌ requireSameRestaurant: Pas d\'utilisateur');
     return res.status(401).json({
       success: false,
       message: 'Authentification requise'
@@ -57,27 +65,36 @@ const requireSameRestaurant = (req, res, next) => {
   
   // Les admins peuvent accéder à tous les restaurants
   if (req.user.role === USER_ROLES.ADMIN) {
+    console.log('✅ requireSameRestaurant: Admin autorisé');
     return next();
   }
   
   // Vérifier que l'utilisateur a un restaurant assigné
-  if (!req.user.restaurantId) {
+  if (!req.user.restaurantId || !req.user.restaurantId._id) {
+    console.log('❌ requireSameRestaurant: Aucun restaurant assigné');
     return res.status(403).json({
       success: false,
       message: 'Aucun restaurant assigné'
     });
   }
-  
-  // Si un restaurantId est fourni dans les paramètres, vérifier qu'il correspond
-  const targetRestaurantId = req.params.restaurantId || req.body.restaurantId;
-  
-  if (targetRestaurantId && !canAccessRestaurant(req.user.role, req.user.restaurantId, targetRestaurantId)) {
+
+  // Si un restaurantid est fourni dans les params, vérifier qu'il correspond
+  const targetRestaurantid = req.params.restaurantId || req.boy.restaurantId;
+
+  if(targetRestaurantid && !canAccessRestaurant(req.user.role, req.user.restaurantId._id, targetRestaurantid)) {
     return res.status(403).json({
-      success: false,
-      message: 'Accès non autorisé à ce restaurant'
+      success :false,
+      message :'Accès non autorisé à ce restaurant'
     });
   }
   
+  // Pour les routes GET génériques, on laisse passer et on filtrera dans la route
+  if (req.method === 'GET' && !req.params.id) {
+    console.log('✅ requireSameRestaurant: Route GET générique autorisée');
+    return next();
+  }
+  
+  console.log('✅ requireSameRestaurant: Validation passée');
   next();
 };
 

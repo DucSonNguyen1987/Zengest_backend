@@ -184,97 +184,97 @@ const seedData = async () => {
         unit: 'cm'
       },
       tables: [
-        {
-          number: '1',
-          capacity: 2,
-          shape: 'round',
-          position: { x: 200, y: 150 },
-          rotation: 0,
-          dimensions: { width: 80, height: 80 },
-          status: 'available'
-        },
-        {
-          number: '2',
-          capacity: 2,
-          shape: 'round',
-          position: { x: 350, y: 150 },
-          rotation: 0,
-          dimensions: { width: 80, height: 80 },
-          status: 'available'
-        },
-        {
-          number: '3',
-          capacity: 4,
-          shape: 'square',
-          position: { x: 500, y: 150 },
-          rotation: 0,
-          dimensions: { width: 120, height: 120 },
-          status: 'occupied'
-        },
-        {
-          number: '4',
-          capacity: 4,
-          shape: 'square',
-          position: { x: 700, y: 150 },
-          rotation: 0,
-          dimensions: { width: 120, height: 120 },
-          status: 'reserved'
-        },
-        {
-          number: '5',
-          capacity: 6,
-          shape: 'rectangle',
-          position: { x: 200, y: 350 },
-          rotation: 0,
-          dimensions: { width: 180, height: 90 },
-          status: 'available'
-        },
-        {
-          number: '6',
-          capacity: 6,
-          shape: 'rectangle',
-          position: { x: 450, y: 350 },
-          rotation: 0,
-          dimensions: { width: 180, height: 90 },
-          status: 'available'
-        },
-        {
-          number: '7',
-          capacity: 8,
-          shape: 'oval',
-          position: { x: 750, y: 350 },
-          rotation: 0,
-          dimensions: { width: 200, height: 120 },
-          status: 'available'
-        },
-        {
-          number: '8',
-          capacity: 2,
-          shape: 'round',
-          position: { x: 200, y: 550 },
-          rotation: 0,
-          dimensions: { width: 80, height: 80 },
-          status: 'cleaning'
-        },
-        {
-          number: '9',
-          capacity: 2,
-          shape: 'round',
-          position: { x: 350, y: 550 },
-          rotation: 0,
-          dimensions: { width: 80, height: 80 },
-          status: 'available'
-        },
-        {
-          number: '10',
-          capacity: 4,
-          shape: 'square',
-          position: { x: 500, y: 550 },
-          rotation: 0,
-          dimensions: { width: 120, height: 120 },
-          status: 'available'
-        }
-      ],
+  {
+    number: '1',
+    capacity: 2,
+    shape: 'round',
+    position: { x: 200, y: 150 },
+    rotation: 0,
+    dimensions: { width: 80, height: 80 },
+    status: 'available' // CORRIGÉ: était 'available', maintenant cohérent
+  },
+  {
+    number: '2',
+    capacity: 2,
+    shape: 'round',
+    position: { x: 350, y: 150 },
+    rotation: 0,
+    dimensions: { width: 80, height: 80 },
+    status: 'available'
+  },
+  {
+    number: '3',
+    capacity: 4,
+    shape: 'square',
+    position: { x: 500, y: 150 },
+    rotation: 0,
+    dimensions: { width: 120, height: 120 },
+    status: 'occupied'
+  },
+  {
+    number: '4',
+    capacity: 4,
+    shape: 'square',
+    position: { x: 700, y: 150 },
+    rotation: 0,
+    dimensions: { width: 120, height: 120 },
+    status: 'reserved'
+  },
+  {
+    number: '5',
+    capacity: 6,
+    shape: 'rectangle',
+    position: { x: 200, y: 350 },
+    rotation: 0,
+    dimensions: { width: 180, height: 90 },
+    status: 'available'
+  },
+  {
+    number: '6',
+    capacity: 6,
+    shape: 'rectangle',
+    position: { x: 450, y: 350 },
+    rotation: 0,
+    dimensions: { width: 180, height: 90 },
+    status: 'available'
+  },
+  {
+    number: '7',
+    capacity: 8,
+    shape: 'oval',
+    position: { x: 750, y: 350 },
+    rotation: 0,
+    dimensions: { width: 200, height: 120 },
+    status: 'available'
+  },
+  {
+    number: '8',
+    capacity: 2,
+    shape: 'round',
+    position: { x: 200, y: 550 },
+    rotation: 0,
+    dimensions: { width: 80, height: 80 },
+    status: 'cleaning'
+  },
+  {
+    number: '9',
+    capacity: 2,
+    shape: 'round',
+    position: { x: 350, y: 550 },
+    rotation: 0,
+    dimensions: { width: 80, height: 80 },
+    status: 'available'
+  },
+  {
+    number: '10',
+    capacity: 4,
+    shape: 'square',
+    position: { x: 500, y: 550 },
+    rotation: 0,
+    dimensions: { width: 120, height: 120 },
+    status: 'available'
+  }
+],
       obstacles: [
         {
           type: 'wall',

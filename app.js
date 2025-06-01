@@ -9,6 +9,7 @@ const config = require('./src/config/config');
 const authRoutes = require('./src/routes/auth');
 const userRoutes = require('./src/routes/users');
 const restaurantRoutes = require('./src/routes/restaurants');
+const floorPlanRoutes = require('./src/routes/floorplans'); // AJOUTÉ
 
 const app = express();
 
@@ -73,6 +74,7 @@ if (config.nodeEnv === 'development') {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/restaurants', restaurantRoutes);
+app.use('/api/floor-plans', floorPlanRoutes); // AJOUTÉ
 
 // Route de santé/test
 app.get('/api/health', (req, res) => {
@@ -95,7 +97,8 @@ app.get('/', (req, res) => {
       health: '/api/health',
       auth: '/api/auth',
       users: '/api/users',
-      restaurants: '/api/restaurants'
+      restaurants: '/api/restaurants',
+      floorPlans: '/api/floor-plans' // AJOUTÉ
     }
   });
 });
@@ -110,7 +113,8 @@ app.use('*', (req, res) => {
       '/api/auth/register',
       '/api/auth/login',
       '/api/users',
-      '/api/restaurants'
+      '/api/restaurants',
+      '/api/floor-plans' // AJOUTÉ
     ]
   });
 });
