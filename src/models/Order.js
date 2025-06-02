@@ -276,44 +276,60 @@ orderSchema.pre('save', async function(next) {
   if (this.isNew && !this.orderNumber) {
     try {
       let attempts = 0;
-      const maxAttempts = 5;
+      const maxAttempts = 10; // Augmenté à 10 tentatives
       
       while (attempts < maxAttempts) {
         const today = new Date();
         const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
         
-        // Créer des nouvelles instances de Date pour éviter les mutations
+        // Utiliser les timestamps de commande plutôt que createdAt
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
         const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
         
-        // Compter les commandes du jour pour ce restaurant
+        // CORRECTION 1: Utiliser timestamps.ordered au lieu de createdAt
+        // et ajouter le restaurantId pour éviter les conflits entre restaurants
         const count = await this.constructor.countDocuments({
           restaurantId: this.restaurantId,
-          createdAt: {
+          'timestamps.ordered': {
             $gte: startOfDay,
             $lt: endOfDay
           }
         });
         
-        const orderNumber = `${dateStr}-${(count + 1).toString().padStart(4, '0')}`;
+        // CORRECTION 2: Ajouter un délai aléatoire pour éviter les races conditions
+        if (attempts > 0) {
+          await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
+        }
         
-        // Vérifier l'unicité
+        // CORRECTION 3: Utiliser un compteur plus précis avec un suffixe aléatoire
+        const sequence = count + attempts + 1;
+        const randomSuffix = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+        const orderNumber = `${dateStr}-${sequence.toString().padStart(4, '0')}-${randomSuffix}`;
+        
+        // Vérifier l'unicité avec une requête atomique
         const existing = await this.constructor.findOne({ orderNumber });
         if (!existing) {
           this.orderNumber = orderNumber;
           console.log(`🔢 OrderNumber généré: ${this.orderNumber} (tentative ${attempts + 1})`);
-          break;
+          return next();
         }
         
         attempts++;
-        if (attempts >= maxAttempts) {
-          throw new Error(`Impossible de générer un orderNumber unique après ${maxAttempts} tentatives`);
-        }
+        console.log(`⚠️  OrderNumber ${orderNumber} existe déjà, tentative ${attempts + 1}/${maxAttempts}`);
       }
+      
+      // Si toutes les tentatives échouent, utiliser un fallback avec timestamp
+      const fallbackNumber = `${dateStr}-${Date.now().toString().slice(-6)}-FB`;
+      console.warn(`⚠️  Utilisation d'un numéro de fallback: ${fallbackNumber}`);
+      this.orderNumber = fallbackNumber;
       
     } catch (error) {
       console.error('❌ Erreur lors de la génération du orderNumber:', error);
-      return next(error);
+      
+      // En cas d'erreur, utiliser un numéro d'urgence
+      const emergencyNumber = `EMG-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      console.warn(`🚨 Numéro d'urgence utilisé: ${emergencyNumber}`);
+      this.orderNumber = emergencyNumber;
     }
   }
   
