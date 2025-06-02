@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script de test pour les routes du menu - Zengest
+# Script de test pour les routes du menu - Zengest (VERSION CORRIGÉE)
 BASE_URL="http://localhost:3000"
 API_URL="${BASE_URL}/api"
 
@@ -38,7 +38,7 @@ TOKEN=""
 MENU_ITEM_ID=""
 NEW_ITEM_ID=""
 
-echo -e "${BLUE}🚀 Tests des routes Menu - Zengest${NC}"
+echo -e "${BLUE}🚀 Tests des routes Menu - Zengest (VERSION CORRIGÉE)${NC}"
 echo "================================================"
 
 # 1. Connexion pour obtenir un token
@@ -75,33 +75,25 @@ fi
 
 echo ""
 
-# 3. Récupération de tous les items du menu (public)
+# 3. Récupération de tous les items du menu (public) - CORRIGÉ
 print_info "3. Récupération de tous les items du menu (public)..."
 RESPONSE=$(curl -s -X GET "${API_URL}/menu")
 
 if [[ $RESPONSE == *"success\":true"* ]]; then
     print_result 0 "Liste du menu récupérée"
-    ITEM_COUNT=$(echo $RESPONSE | grep -o '"name"' | wc -l)
+    
+    # Méthode corrigée pour extraire l'ID - utilise grep et sed
+    MENU_ITEM_ID=$(echo "$RESPONSE" | grep -o '"_id":"[^"]*' | head -1 | cut -d'"' -f4)
+    
+    # Compter les items avec une méthode plus robuste
+    ITEM_COUNT=$(echo "$RESPONSE" | grep -o '"_id":"[^"]*' | wc -l)
     echo "   Nombre d'items trouvés: $ITEM_COUNT"
     
-    # Extraire le premier item ID pour les tests suivants
-    if command -v python3 &> /dev/null; then
-        MENU_ITEM_ID=$(python3 -c "
-import json
-try:
-    data = json.loads('''$RESPONSE''')
-    items = data.get('data', {}).get('menuItems', [])
-    if items and len(items) > 0:
-        print(items[0]['_id'])
-except:
-    pass
-" 2>/dev/null)
-    fi
-    
-    if [ ! -z "$MENU_ITEM_ID" ]; then
-        echo "   Premier item ID: $MENU_ITEM_ID"
+    if [ ! -z "$MENU_ITEM_ID" ] && [ "$MENU_ITEM_ID" != "" ]; then
+        echo "   ✅ Premier item ID: $MENU_ITEM_ID"
     else
-        echo "   ⚠️  Aucun item trouvé"
+        echo "   ⚠️  Aucune extraction d'ID possible"
+        print_debug "Structure de réponse: $(echo "$RESPONSE" | head -c 300)..."
     fi
 else
     print_result 1 "Échec de récupération du menu"
@@ -116,7 +108,7 @@ CATEGORY_RESPONSE=$(curl -s -X GET "${API_URL}/menu?category=mains")
 
 if [[ $CATEGORY_RESPONSE == *"success\":true"* ]]; then
     print_result 0 "Filtrage par catégorie fonctionne"
-    MAINS_COUNT=$(echo $CATEGORY_RESPONSE | grep -o '"name"' | wc -l)
+    MAINS_COUNT=$(echo $CATEGORY_RESPONSE | grep -o '"_id":"[^"]*' | wc -l)
     echo "   Items dans 'mains': $MAINS_COUNT"
 else
     print_result 1 "Échec du filtrage par catégorie"
@@ -125,14 +117,22 @@ fi
 
 echo ""
 
-# 5. Test de recherche
+# 5. Test de recherche - CORRIGÉ
 print_info "5. Test de recherche d'items..."
 SEARCH_RESPONSE=$(curl -s -X GET "${API_URL}/menu/search?q=burger")
 
 if [[ $SEARCH_RESPONSE == *"success\":true"* ]]; then
     print_result 0 "Recherche fonctionne"
-    SEARCH_COUNT=$(echo $SEARCH_RESPONSE | grep -o '"name"' | wc -l)
+    SEARCH_COUNT=$(echo $SEARCH_RESPONSE | grep -o '"_id":"[^"]*' | wc -l)
     echo "   Résultats pour 'burger': $SEARCH_COUNT items"
+    
+    # Si pas de résultats, essayer d'autres termes
+    if [ "$SEARCH_COUNT" -eq 0 ]; then
+        echo "   🔍 Test avec d'autres termes..."
+        ALT_SEARCH=$(curl -s -X GET "${API_URL}/menu/search?q=poulet")
+        ALT_COUNT=$(echo $ALT_SEARCH | grep -o '"_id":"[^"]*' | wc -l)
+        echo "   Résultats pour 'poulet': $ALT_COUNT items"
+    fi
 else
     print_result 1 "Échec de la recherche"
     echo "   Réponse: $SEARCH_RESPONSE"
@@ -140,24 +140,22 @@ fi
 
 echo ""
 
-# 6. Test des catégories avec compteurs
+# 6. Test des catégories avec compteurs - CORRIGÉ
 print_info "6. Récupération des catégories avec compteurs..."
 CATEGORIES_RESPONSE=$(curl -s -X GET "${API_URL}/menu/categories")
 
 if [[ $CATEGORIES_RESPONSE == *"success\":true"* ]]; then
     print_result 0 "Catégories récupérées"
-    if command -v python3 &> /dev/null; then
-        CAT_COUNT=$(python3 -c "
-import json
-try:
-    data = json.loads('''$CATEGORIES_RESPONSE''')
-    categories = data.get('data', {}).get('categories', [])
-    print(len(categories))
-except:
-    print(0)
-" 2>/dev/null)
-        echo "   Nombre de catégories: $CAT_COUNT"
-    fi
+    # Compter les catégories avec une méthode simple
+    CAT_COUNT=$(echo "$CATEGORIES_RESPONSE" | grep -o '"_id":"[^"]*' | wc -l)
+    echo "   Nombre de catégories: $CAT_COUNT"
+    
+    # Afficher quelques catégories trouvées
+    echo "   Exemple de catégories trouvées:"
+    echo "$CATEGORIES_RESPONSE" | grep -o '"_id":"[^"]*' | head -3 | while read line; do
+        CAT_NAME=$(echo $line | cut -d'"' -f4)
+        echo "      - $CAT_NAME"
+    done
 else
     print_result 1 "Échec récupération des catégories"
     echo "   Réponse: $CATEGORIES_RESPONSE"
@@ -165,25 +163,16 @@ fi
 
 echo ""
 
-# 7. Récupération d'un item spécifique
-if [ ! -z "$MENU_ITEM_ID" ]; then
+# 7. Récupération d'un item spécifique - CORRIGÉ
+if [ ! -z "$MENU_ITEM_ID" ] && [ "$MENU_ITEM_ID" != "" ]; then
     print_info "7. Récupération d'un item spécifique: $MENU_ITEM_ID"
     ITEM_RESPONSE=$(curl -s -X GET "${API_URL}/menu/$MENU_ITEM_ID")
 
     if [[ $ITEM_RESPONSE == *"success\":true"* ]]; then
         print_result 0 "Item spécifique récupéré"
-        if command -v python3 &> /dev/null; then
-            ITEM_NAME=$(python3 -c "
-import json
-try:
-    data = json.loads('''$ITEM_RESPONSE''')
-    item = data.get('data', {}).get('menuItem', {})
-    print(item.get('name', 'N/A'))
-except:
-    print('N/A')
-" 2>/dev/null)
-            echo "   Nom de l'item: $ITEM_NAME"
-        fi
+        # Extraire le nom de l'item de façon simple
+        ITEM_NAME=$(echo "$ITEM_RESPONSE" | grep -o '"name":"[^"]*' | head -1 | cut -d'"' -f4)
+        echo "   Nom de l'item: $ITEM_NAME"
     else
         print_result 1 "Échec récupération de l'item spécifique"
         echo "   Réponse: $ITEM_RESPONSE"
@@ -227,17 +216,8 @@ CREATE_RESPONSE=$(curl -s -X POST \
 
 if [[ $CREATE_RESPONSE == *"success\":true"* ]]; then
     print_result 0 "Nouvel item créé avec succès"
-    if command -v python3 &> /dev/null; then
-        NEW_ITEM_ID=$(python3 -c "
-import json
-try:
-    data = json.loads('''$CREATE_RESPONSE''')
-    item = data.get('data', {}).get('menuItem', {})
-    print(item.get('_id', ''))
-except:
-    pass
-" 2>/dev/null)
-    fi
+    # Extraction simplifiée de l'ID du nouvel item
+    NEW_ITEM_ID=$(echo $CREATE_RESPONSE | grep -o '"_id":"[^"]*' | head -1 | cut -d'"' -f4)
     
     if [ ! -z "$NEW_ITEM_ID" ]; then
         echo "   Nouvel item ID: $NEW_ITEM_ID"
@@ -250,8 +230,8 @@ fi
 
 echo ""
 
-# 9. Test de mise à jour d'un item
-if [ ! -z "$MENU_ITEM_ID" ]; then
+# 9. Test de mise à jour d'un item - CORRIGÉ
+if [ ! -z "$MENU_ITEM_ID" ] && [ "$MENU_ITEM_ID" != "" ]; then
     print_info "9. Mise à jour de l'item: $MENU_ITEM_ID"
     UPDATE_RESPONSE=$(curl -s -X PUT \
       -H "Authorization: Bearer $TOKEN" \
@@ -274,8 +254,8 @@ fi
 
 echo ""
 
-# 10. Test de mise à jour de la disponibilité
-if [ ! -z "$MENU_ITEM_ID" ]; then
+# 10. Test de mise à jour de la disponibilité - CORRIGÉ
+if [ ! -z "$MENU_ITEM_ID" ] && [ "$MENU_ITEM_ID" != "" ]; then
     print_info "10. Mise à jour de la disponibilité..."
     AVAILABILITY_RESPONSE=$(curl -s -X PATCH \
       -H "Authorization: Bearer $TOKEN" \
@@ -299,8 +279,8 @@ fi
 
 echo ""
 
-# 11. Test de mise à jour des prix
-if [ ! -z "$MENU_ITEM_ID" ]; then
+# 11. Test de mise à jour des prix - CORRIGÉ
+if [ ! -z "$MENU_ITEM_ID" ] && [ "$MENU_ITEM_ID" != "" ]; then
     print_info "11. Mise à jour des prix..."
     PRICE_RESPONSE=$(curl -s -X PATCH \
       -H "Authorization: Bearer $TOKEN" \
@@ -334,8 +314,8 @@ fi
 
 echo ""
 
-# 12. Test d'items similaires
-if [ ! -z "$MENU_ITEM_ID" ]; then
+# 12. Test d'items similaires - CORRIGÉ
+if [ ! -z "$MENU_ITEM_ID" ] && [ "$MENU_ITEM_ID" != "" ]; then
     print_info "12. Récupération d'items similaires..."
     RELATED_RESPONSE=$(curl -s -X GET \
       -H "Authorization: Bearer $TOKEN" \
@@ -343,18 +323,8 @@ if [ ! -z "$MENU_ITEM_ID" ]; then
 
     if [[ $RELATED_RESPONSE == *"success\":true"* ]]; then
         print_result 0 "Items similaires récupérés"
-        if command -v python3 &> /dev/null; then
-            RELATED_COUNT=$(python3 -c "
-import json
-try:
-    data = json.loads('''$RELATED_RESPONSE''')
-    items = data.get('data', {}).get('relatedItems', [])
-    print(len(items))
-except:
-    print(0)
-" 2>/dev/null)
-            echo "   Nombre d'items similaires: $RELATED_COUNT"
-        fi
+        RELATED_COUNT=$(echo $RELATED_RESPONSE | grep -o '"_id":"[^"]*' | wc -l)
+        echo "   Nombre d'items similaires: $RELATED_COUNT"
     else
         print_result 1 "Échec récupération items similaires"
         echo "   Réponse: $RELATED_RESPONSE"
@@ -427,24 +397,19 @@ fi
 
 echo ""
 
-# 15. Test de recherche avec filtres alimentaires
+# 15. Test de recherche avec filtres alimentaires - CORRIGÉ
 print_info "15. Test de recherche avec filtres alimentaires..."
 VEGETARIAN_RESPONSE=$(curl -s -X GET "${API_URL}/menu?isVegetarian=true")
 
 if [[ $VEGETARIAN_RESPONSE == *"success\":true"* ]]; then
     print_result 0 "Filtrage végétarien fonctionne"
-    if command -v python3 &> /dev/null; then
-        VEG_COUNT=$(python3 -c "
-import json
-try:
-    data = json.loads('''$VEGETARIAN_RESPONSE''')
-    items = data.get('data', {}).get('menuItems', [])
-    print(len(items))
-except:
-    print(0)
-" 2>/dev/null)
-        echo "   Items végétariens: $VEG_COUNT"
-    fi
+    VEG_COUNT=$(echo "$VEGETARIAN_RESPONSE" | grep -o '"_id":"[^"]*' | wc -l)
+    echo "   Items végétariens: $VEG_COUNT"
+    
+    # Test végan aussi
+    VEGAN_RESPONSE=$(curl -s -X GET "${API_URL}/menu?isVegan=true")
+    VEGAN_COUNT=$(echo "$VEGAN_RESPONSE" | grep -o '"_id":"[^"]*' | wc -l)
+    echo "   Items végans: $VEGAN_COUNT"
 else
     print_result 1 "Échec du filtrage végétarien"
     echo "   Réponse: $VEGETARIAN_RESPONSE"
@@ -452,24 +417,14 @@ fi
 
 echo ""
 
-# 16. Test de filtrage par prix
+# 16. Test de filtrage par prix - CORRIGÉ
 print_info "16. Test de filtrage par prix..."
 PRICE_FILTER_RESPONSE=$(curl -s -X GET "${API_URL}/menu?minPrice=10&maxPrice=20")
 
 if [[ $PRICE_FILTER_RESPONSE == *"success\":true"* ]]; then
     print_result 0 "Filtrage par prix fonctionne"
-    if command -v python3 &> /dev/null; then
-        PRICE_COUNT=$(python3 -c "
-import json
-try:
-    data = json.loads('''$PRICE_FILTER_RESPONSE''')
-    items = data.get('data', {}).get('menuItems', [])
-    print(len(items))
-except:
-    print(0)
-" 2>/dev/null)
-        echo "   Items entre 10€ et 20€: $PRICE_COUNT"
-    fi
+    PRICE_COUNT=$(echo "$PRICE_FILTER_RESPONSE" | grep -o '"_id":"[^"]*' | wc -l)
+    echo "   Items entre 10€ et 20€: $PRICE_COUNT"
 else
     print_result 1 "Échec du filtrage par prix"
     echo "   Réponse: $PRICE_FILTER_RESPONSE"
@@ -477,8 +432,8 @@ fi
 
 echo ""
 
-# 17. Nettoyage et suppression de l'item de test
-if [ ! -z "$NEW_ITEM_ID" ]; then
+# 17. Nettoyage et suppression de l'item de test - CORRIGÉ
+if [ ! -z "$NEW_ITEM_ID" ] && [ "$NEW_ITEM_ID" != "" ]; then
     print_info "17. Nettoyage: suppression de l'item de test..."
     DELETE_RESPONSE=$(curl -s -X DELETE \
       -H "Authorization: Bearer $TOKEN" \
@@ -496,26 +451,26 @@ fi
 
 echo ""
 
-# 18. Statistiques finales
+# 18. Statistiques finales - CORRIGÉ
 print_info "18. Statistiques finales du menu..."
 
-# Compter les items par catégorie
 FINAL_STATS=$(curl -s -X GET "${API_URL}/menu/categories")
 if [[ $FINAL_STATS == *"success\":true"* ]]; then
     echo "   📊 Statistiques par catégorie:"
-    if command -v python3 &> /dev/null; then
-        python3 -c "
-import json
-try:
-    data = json.loads('''$FINAL_STATS''')
-    categories = data.get('data', {}).get('categories', [])
-    for cat in categories:
-        print(f'      {cat[\"_id\"]}: {cat[\"count\"]} items (prix moyen: {cat[\"avgPrice\"]:.2f}€)')
-except Exception as e:
-    print(f'      Erreur analyse: {e}')
-" 2>/dev/null
-    fi
+    
+    # Affichage simple des catégories trouvées
+    echo "$FINAL_STATS" | grep -o '"_id":"[^"]*' | while read line; do
+        CAT_NAME=$(echo $line | cut -d'"' -f4)
+        echo "      - $CAT_NAME"
+    done | head -5
+    
+    echo "      ... (voir toutes les catégories via GET /api/menu/categories)"
 fi
+
+# Compter les items finaux
+FINAL_COUNT_RESPONSE=$(curl -s -X GET "${API_URL}/menu")
+FINAL_COUNT=$(echo "$FINAL_COUNT_RESPONSE" | grep -o '"_id":"[^"]*' | wc -l)
+echo "   📊 Total final d'items dans le menu: $FINAL_COUNT"
 
 echo ""
 echo -e "${BLUE}================================================${NC}"
@@ -537,7 +492,7 @@ echo ""
 echo "🚀 Votre API Menu est opérationnelle !"
 echo ""
 echo "💡 Fonctionnalités disponibles:"
-echo "   - Menu complet basé sur la carte Pause Café"
+echo "   - Menu complet avec $FINAL_COUNT items"
 echo "   - Recherche textuelle intelligente"
 echo "   - Filtres par catégorie, prix, restrictions alimentaires"
 echo "   - Gestion des variantes de prix (tailles)"
@@ -555,3 +510,5 @@ echo "   POST /api/menu - Création (management)"
 echo "   PUT /api/menu/:id - Modification"
 echo "   PATCH /api/menu/:id/availability - Disponibilité"
 echo "   PATCH /api/menu/:id/price - Prix"
+echo ""
+echo "✨ Script de test corrigé - extraction d'ID améliorée !"

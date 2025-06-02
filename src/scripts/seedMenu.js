@@ -5,529 +5,734 @@ const MenuItem = require('../models/Menu');
 const Restaurant = require('../models/Restaurant');
 const User = require('../models/User');
 
-// Données du menu Pause Café
+// Données du menu Pause Café complet
 const menuData = {
-  // PLATS PRINCIPAUX
-  mains: [
+  // ENTRÉES & APÉRITIFS
+  appetizers: [
     {
-      name: 'Poulet "Crousti-Crousti"',
-      description: 'Poulet croustillant, purée maison, sweet chili sauce',
-      category: 'mains',
-      subcategory: 'volaille',
-      priceVariants: [{ size: 'portion', price: 14, isDefault: true }],
-      tags: ['signature', 'popular'],
-      dietary: { isGlutenFree: false, isVegetarian: false, isVegan: false }
+      name: "Tarama Sumac",
+      description: "Tarama maison au sumac",
+      category: "appetizers",
+      subcategory: "méditerranéen",
+      priceVariants: [{ size: "portion", price: 7, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["méditerranéen", "poisson"]
     },
     {
-      name: 'Tartare de Bœuf',
-      description: 'Tartare de bœuf à notre façon, servi avec frites maison',
-      category: 'mains',
-      subcategory: 'viande',
-      priceVariants: [{ size: 'portion', price: 21, isDefault: true }],
-      tags: ['signature', 'premium'],
-      dietary: { isGlutenFree: false, isVegetarian: false, isVegan: false }
+      name: "Œufs Pochés Bio en Cocotte",
+      description: "Œufs pochés bio en cocotte, ciboulette (bacon +1€)",
+      category: "appetizers",
+      subcategory: "bio",
+      priceVariants: [
+        { size: "sans bacon", price: 8, isDefault: true },
+        { size: "avec bacon", price: 9, isDefault: false }
+      ],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: true, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "œufs", "healthy"]
     },
     {
-      name: 'Pavé de Bœuf',
-      description: 'Pavé de bœuf sauce béarnaise, servi avec frites maison',
-      category: 'mains',
-      subcategory: 'viande',
-      priceVariants: [{ size: 'portion', price: 15, isDefault: true }],
-      dietary: { isGlutenFree: false, isVegetarian: false, isVegan: false }
+      name: "Houmous",
+      description: "Houmous maison, huile au piment d'Alep, pita maison",
+      category: "appetizers",
+      subcategory: "végétarien",
+      priceVariants: [{ size: "portion", price: 8, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: false, isOrganic: false, isSpicy: true, spicyLevel: 1 },
+      tags: ["vegan", "méditerranéen", "maison"]
     },
     {
-      name: 'Cheese Burger',
-      description: 'Potato bun, cheddar affiné 9 mois, oignons confits, sauce secrète, frites maison',
-      category: 'mains',
-      subcategory: 'burger',
-      priceVariants: [{ size: 'portion', price: 17.5, isDefault: true }],
-      tags: ['popular'],
-      dietary: { isGlutenFree: false, isVegetarian: false, isVegan: false }
+      name: "Straciatella",
+      description: "Straciatella, huile vierge, poires rôties, romarin et pain grillé",
+      category: "appetizers",
+      subcategory: "fromage",
+      priceVariants: [{ size: "portion", price: 10, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["fromage", "italien", "premium"]
     },
     {
-      name: 'Bacon Cheese Burger',
-      description: 'Cheddar affiné 9 mois, oignons confits, sauce secrète, bacon, frites maison',
-      category: 'mains',
-      subcategory: 'burger',
-      priceVariants: [{ size: 'portion', price: 16, isDefault: true }],
-      dietary: { isGlutenFree: false, isVegetarian: false, isVegan: false }
+      name: "Assiette de Charcuterie",
+      description: "Jambon de pays, coppa, chorizo, saucisson sec - Maison \"MAS\"",
+      category: "appetizers",
+      subcategory: "charcuterie",
+      priceVariants: [
+        { size: "assiette complète", price: 17, isDefault: true },
+        { size: "à l'unité", price: 7, isDefault: false }
+      ],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["charcuterie", "artisanal", "maison MAS"]
     },
     {
-      name: 'Pork Bun',
-      description: 'Effiloché de porc fumé, coleslaw de choux rouges, sauce spicy BBQ, frites maison',
-      category: 'mains',
-      subcategory: 'viande',
-      priceVariants: [{ size: 'portion', price: 16, isDefault: true }],
-      tags: ['spicy'],
-      dietary: { isGlutenFree: false, isVegetarian: false, isVegan: false, isSpicy: true, spicyLevel: 2 }
+      name: "Combo Charcuterie + Fromages",
+      description: "Charcuterie + Comté 18 mois + Saint Nectaire fermier",
+      category: "appetizers",
+      subcategory: "plateau",
+      priceVariants: [{ size: "plateau", price: 20, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["plateau", "fromage", "charcuterie", "premium"]
     },
     {
-      name: 'Orecchiette Pesto Pistache',
-      description: 'Orecchiette, pesto de pistache & basilic, parmesan',
-      category: 'mains',
-      subcategory: 'pâtes',
-      priceVariants: [{ size: 'portion', price: 17.5, isDefault: true }],
-      tags: ['vegetarian'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: false }
-    },
-    {
-      name: 'Saumon Laqué Teriyaki',
-      description: 'Saumon "Label Rouge", sauce sriracha & riz du dragon',
-      category: 'mains',
-      subcategory: 'poisson',
-      priceVariants: [{ size: 'portion', price: 15, isDefault: true }],
-      tags: ['healthy', 'label-rouge'],
-      dietary: { isGlutenFree: true, isVegetarian: false, isVegan: false }
-    },
-    {
-      name: 'Thon Albacore Mi-Cuit',
-      description: 'Thon albacore mi-cuit, sauce sésame, aubergines "Hong Shao"',
-      category: 'mains',
-      subcategory: 'poisson',
-      priceVariants: [{ size: 'portion', price: 18, isDefault: true }],
-      tags: ['premium', 'healthy'],
-      dietary: { isGlutenFree: true, isVegetarian: false, isVegan: false }
-    },
-    {
-      name: 'Dahl de Lentilles',
-      description: 'Dahl de lentilles, riz du dragon',
-      category: 'mains',
-      subcategory: 'végétarien',
-      priceVariants: [{ size: 'portion', price: 13, isDefault: true }],
-      tags: ['vegan', 'healthy'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: true }
-    },
-    {
-      name: 'Veggie Burger',
-      description: 'Halloumi, portobello et frites de patates douces',
-      category: 'mains',
-      subcategory: 'végétarien',
-      priceVariants: [{ size: 'portion', price: 15, isDefault: true }],
-      tags: ['vegetarian'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: false }
-    },
-    {
-      name: 'Lasagnes de Légumes',
-      description: 'Aubergines, courgettes, sauce tomate et roquette',
-      category: 'mains',
-      subcategory: 'végétarien',
-      priceVariants: [{ size: 'portion', price: 14.5, isDefault: true }],
-      tags: ['vegetarian'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: false }
+      name: "Falafels",
+      description: "Falafels maison, sauce yaourt citron / tahini",
+      category: "appetizers",
+      subcategory: "végétarien",
+      priceVariants: [{ size: "portion", price: 8, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["vegan", "méditerranéen", "healthy"]
     }
   ],
 
   // SALADES
   salads: [
     {
-      name: 'Salade Chinoise',
-      description: 'Poulet snacké, maki au concombre, Shanghai sauce',
-      category: 'salads',
-      priceVariants: [{ size: 'portion', price: 15, isDefault: true }],
-      tags: ['healthy', 'asian'],
-      dietary: { isGlutenFree: false, isVegetarian: false, isVegan: false }
+      name: "Salade Chinoise",
+      description: "Poulet snacké, maki au concombre, Shanghai sauce",
+      category: "salads",
+      subcategory: "asiatique",
+      priceVariants: [{ size: "portion", price: 15, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["asiatique", "poulet", "healthy"]
     },
     {
-      name: 'Salade Avocat Quinoa Halloumi',
-      description: 'Avocat, quinoa, halloumi rôti aux herbes',
-      category: 'salads',
-      priceVariants: [{ size: 'portion', price: 15, isDefault: true }],
-      tags: ['vegetarian', 'healthy'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: false }
+      name: "Salade Avocat Quinoa Halloumi",
+      description: "Avocat, quinoa, halloumi rôti aux herbes",
+      category: "salads",
+      subcategory: "végétarien",
+      priceVariants: [{ size: "portion", price: 15, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["végétarien", "healthy", "quinoa"]
     },
     {
-      name: 'Salade Avocat Quinoa Poulet',
-      description: 'Avocat, quinoa, poulet mariné au miel d\'épices & sésame',
-      category: 'salads',
-      priceVariants: [{ size: 'portion', price: 15, isDefault: true }],
-      tags: ['healthy'],
-      dietary: { isGlutenFree: true, isVegetarian: false, isVegan: false }
+      name: "Salade Avocat Quinoa Poulet",
+      description: "Avocat, quinoa, poulet mariné au miel d'épices & sésame",
+      category: "salads",
+      subcategory: "healthy",
+      priceVariants: [{ size: "portion", price: 15, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["healthy", "quinoa", "poulet"]
     },
     {
-      name: 'Chirashi Bowl Saumon',
-      description: 'Saumon "Label Rouge", riz vinaigré, avocat & sauce ponzu',
-      category: 'salads',
-      priceVariants: [{ size: 'portion', price: 16.5, isDefault: true }],
-      tags: ['healthy', 'japanese', 'label-rouge'],
-      dietary: { isGlutenFree: true, isVegetarian: false, isVegan: false }
+      name: "Chirashi Bowl Saumon",
+      description: "Saumon \"Label Rouge\", riz vinaigré, avocat & sauce ponzu",
+      category: "salads",
+      subcategory: "japonais",
+      priceVariants: [{ size: "portion", price: 16.5, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["japonais", "saumon", "label rouge", "healthy"]
     },
     {
-      name: 'Carpaccio de Bœuf',
-      description: 'Frites maison, roquette, câpres et parmesan',
-      category: 'salads',
-      priceVariants: [{ size: 'portion', price: 16, isDefault: true }],
-      tags: ['premium'],
-      dietary: { isGlutenFree: true, isVegetarian: false, isVegan: false }
+      name: "Carpaccio de Bœuf",
+      description: "Frites maison, roquette, câpres et parmesan",
+      category: "salads",
+      subcategory: "viande",
+      priceVariants: [{ size: "portion", price: 16, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["bœuf", "italien", "premium"]
     },
     {
-      name: 'Satay de Volaille',
-      description: 'Nouilles chinoises et légumes sautés',
-      category: 'salads',
-      priceVariants: [{ size: 'portion', price: 15, isDefault: true }],
-      tags: ['asian'],
-      dietary: { isGlutenFree: false, isVegetarian: false, isVegan: false }
+      name: "Satay de Volaille",
+      description: "Nouilles chinoises et légumes sautés",
+      category: "salads",
+      subcategory: "asiatique",
+      priceVariants: [{ size: "portion", price: 15, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: true, spicyLevel: 2 },
+      tags: ["asiatique", "volaille", "épicé"]
     }
   ],
 
-  // ENTRÉES
-  appetizers: [
+  // PLATS PRINCIPAUX
+  mains: [
     {
-      name: 'Tarama Sumac',
-      description: 'Tarama maison, sumac',
-      category: 'appetizers',
-      priceVariants: [{ size: 'portion', price: 7, isDefault: true }],
-      tags: ['mediterranean'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: false }
+      name: "Poulet \"Crousti-Crousti\"",
+      description: "Poulet croustillant, purée maison, sweet chili sauce",
+      category: "mains",
+      subcategory: "volaille",
+      priceVariants: [{ size: "portion", price: 14, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: true, spicyLevel: 1 },
+      tags: ["signature", "poulet", "popular"]
     },
     {
-      name: 'Œufs Pochés Bio en Cocotte',
-      description: 'Ciboulette (bacon +1€)',
-      category: 'appetizers',
-      priceVariants: [{ size: 'portion', price: 8, isDefault: true }],
-      tags: ['bio'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: false, isOrganic: true }
+      name: "Tartare de Bœuf",
+      description: "Tartare de bœuf à notre façon, servi avec frites maison",
+      category: "mains",
+      subcategory: "viande",
+      priceVariants: [{ size: "portion", price: 21, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["signature", "bœuf", "premium"]
     },
     {
-      name: 'Houmous',
-      description: 'Huile au piment d\'Alep, pita maison',
-      category: 'appetizers',
-      priceVariants: [{ size: 'portion', price: 8, isDefault: true }],
-      tags: ['vegan', 'mediterranean'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: true }
+      name: "Pavé de Bœuf",
+      description: "Pavé de bœuf sauce béarnaise, servi avec frites maison",
+      category: "mains",
+      subcategory: "viande",
+      priceVariants: [{ size: "portion", price: 15, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["bœuf", "classique"]
     },
     {
-      name: 'Straciatella',
-      description: 'Huile vierge, poires rôties, romarin et pain grillé',
-      category: 'appetizers',
-      priceVariants: [{ size: 'portion', price: 10, isDefault: true }],
-      tags: ['premium'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: false }
+      name: "Cheese Burger",
+      description: "Potato bun, cheddar affiné 9 mois, oignons confits, sauce secrète, frites maison",
+      category: "mains",
+      subcategory: "burger",
+      priceVariants: [{ size: "portion", price: 17.5, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["burger", "popular", "cheddar"]
     },
     {
-      name: 'Assiette de Charcuterie',
-      description: 'Jambon de pays, coppa, chorizo, saucisson sec - Maison "MAS"',
-      category: 'appetizers',
-      priceVariants: [
-        { size: 'assiette', price: 17, isDefault: true },
-        { size: 'à l\'unité', price: 7, isDefault: false }
-      ],
-      tags: ['premium', 'artisanal'],
-      dietary: { isGlutenFree: true, isVegetarian: false, isVegan: false }
+      name: "Bacon Cheese Burger",
+      description: "Cheddar affiné 9 mois, oignons confits, sauce secrète & bacon, frites maison",
+      category: "mains",
+      subcategory: "burger",
+      priceVariants: [{ size: "portion", price: 16, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["burger", "bacon", "cheddar"]
     },
     {
-      name: 'Combo Charcuterie + Fromages',
-      description: 'Charcuterie + Comté 18 mois + Saint Nectaire fermier',
-      category: 'appetizers',
-      priceVariants: [{ size: 'portion', price: 20, isDefault: true }],
-      tags: ['premium', 'artisanal'],
-      dietary: { isGlutenFree: true, isVegetarian: false, isVegan: false }
+      name: "Pork Bun",
+      description: "Effiloché de porc fumé, coleslaw de choux rouges, sauce spicy BBQ, frites maison",
+      category: "mains",
+      subcategory: "viande",
+      priceVariants: [{ size: "portion", price: 16, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: true, spicyLevel: 3 },
+      tags: ["porc", "BBQ", "épicé"]
     },
     {
-      name: 'Falafels',
-      description: 'Sauce yaourt citron / tahini',
-      category: 'appetizers',
-      priceVariants: [{ size: 'portion', price: 8, isDefault: true }],
-      tags: ['vegan', 'mediterranean'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: true }
+      name: "Orecchiette Pesto Pistache",
+      description: "Orecchiette, pesto de pistache & basilic, parmesan",
+      category: "mains",
+      subcategory: "pâtes",
+      priceVariants: [{ size: "portion", price: 17.5, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["végétarien", "pâtes", "italien"]
+    },
+    {
+      name: "Saumon Laqué Teriyaki",
+      description: "Saumon \"Label Rouge\", sauce sriracha & riz du dragon",
+      category: "mains",
+      subcategory: "poisson",
+      priceVariants: [{ size: "portion", price: 15, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: true, spicyLevel: 2 },
+      tags: ["saumon", "label rouge", "asiatique"]
+    },
+    {
+      name: "Thon Albacore Mi-Cuit",
+      description: "Thon albacore mi-cuit, sauce sésame, aubergines \"Hong Shao\"",
+      category: "mains",
+      subcategory: "poisson",
+      priceVariants: [{ size: "portion", price: 18, isDefault: true }],
+      dietary: { isVegetarian: false, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["thon", "premium", "asiatique"]
+    },
+    {
+      name: "Dahl de Lentilles",
+      description: "Dahl de lentilles, riz du dragon",
+      category: "mains",
+      subcategory: "végétarien",
+      priceVariants: [{ size: "portion", price: 13, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: true, spicyLevel: 2 },
+      tags: ["vegan", "healthy", "épicé"]
+    },
+    {
+      name: "Veggie Burger",
+      description: "Halloumi, portobello et frites de patates douces",
+      category: "mains",
+      subcategory: "végétarien",
+      priceVariants: [{ size: "portion", price: 15, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["végétarien", "burger", "halloumi"]
+    },
+    {
+      name: "Lasagnes de Légumes",
+      description: "Aubergines, courgettes, sauce tomate et roquette",
+      category: "mains",
+      subcategory: "végétarien",
+      priceVariants: [{ size: "portion", price: 14.5, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["végétarien", "italien", "légumes"]
     }
   ],
 
   // ACCOMPAGNEMENTS
   sides: [
     {
-      name: 'Frites Homemade',
-      description: 'Frites maison cuites en 2 cuissons',
-      category: 'sides',
-      priceVariants: [{ size: 'portion', price: 5, isDefault: true }],
-      tags: ['popular'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: true }
+      name: "Frites Homemade",
+      description: "Frites maison cuites en 2 cuissons",
+      category: "sides",
+      priceVariants: [{ size: "portion", price: 5, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["maison", "popular"]
     },
     {
-      name: 'Sweet Potatoes',
-      description: 'Frites de patates douces',
-      category: 'sides',
-      priceVariants: [{ size: 'portion', price: 6, isDefault: true }],
-      tags: ['healthy'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: true }
+      name: "Sweet Potatoes",
+      description: "Frites de patates douces",
+      category: "sides",
+      priceVariants: [{ size: "portion", price: 6, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["healthy", "sweet"]
     },
     {
-      name: 'Purée Maison',
-      description: 'Purée de pommes de terre maison',
-      category: 'sides',
-      priceVariants: [{ size: 'portion', price: 5, isDefault: true }],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: false }
+      name: "Purée Maison",
+      description: "Purée de pommes de terre maison",
+      category: "sides",
+      priceVariants: [{ size: "portion", price: 5, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["maison", "comfort"]
     },
     {
-      name: 'Aubergines "Hong Shao"',
-      description: 'Aubergines à la chinoise',
-      category: 'sides',
-      priceVariants: [{ size: 'portion', price: 6, isDefault: true }],
-      tags: ['asian'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: true }
+      name: "Aubergines \"Hong Shao\"",
+      description: "Aubergines à la chinoise",
+      category: "sides",
+      priceVariants: [{ size: "portion", price: 6, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: true, spicyLevel: 2 },
+      tags: ["asiatique", "épicé"]
     }
   ],
 
   // DESSERTS
   desserts: [
     {
-      name: 'Cookie Choco-Noisettes',
-      description: 'Cookie maison chocolat et noisettes',
-      category: 'desserts',
+      name: "Cookie Choco-Noisettes",
+      description: "Cookie maison chocolat et noisettes",
+      category: "desserts",
       priceVariants: [
-        { size: 'simple', price: 4, isDefault: true },
-        { size: 'avec glace', price: 7, isDefault: false }
+        { size: "simple", price: 4, isDefault: true },
+        { size: "avec glace", price: 7, isDefault: false }
       ],
-      tags: ['homemade'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: false }
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["maison", "chocolat"]
     },
     {
-      name: 'Tiramisu',
-      description: 'Tiramisu maison',
-      category: 'desserts',
+      name: "Tiramisu",
+      description: "Tiramisu maison",
+      category: "desserts",
       priceVariants: [
-        { size: 'simple', price: 6, isDefault: true },
-        { size: 'avec café', price: 7, isDefault: false }
+        { size: "portion", price: 6, isDefault: true },
+        { size: "avec café", price: 7, isDefault: false }
       ],
-      tags: ['homemade', 'italian'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: false }
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["maison", "italien", "café"]
     },
     {
-      name: 'Cookie + Café',
-      description: 'Cookie choco-noisettes accompagné d\'un café',
-      category: 'desserts',
-      priceVariants: [{ size: 'combo', price: 7, isDefault: true }],
-      tags: ['combo'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: false }
+      name: "Cookie + Café",
+      description: "Cookie choco-noisettes accompagné d'un café",
+      category: "desserts",
+      priceVariants: [{ size: "combo", price: 7, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["combo", "café"]
     },
     {
-      name: 'Gâteau Chocolat',
-      description: 'Gâteau au chocolat maison',
-      category: 'desserts',
-      priceVariants: [{ size: 'portion', price: 6, isDefault: true }],
-      tags: ['homemade'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: false }
+      name: "Gâteau Chocolat",
+      description: "Gâteau au chocolat maison",
+      category: "desserts",
+      priceVariants: [{ size: "portion", price: 6, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["maison", "chocolat"]
     },
     {
-      name: 'Riz au Lait Vanillé',
-      description: 'Caramel beurre salé, spéculoos',
-      category: 'desserts',
-      priceVariants: [{ size: 'portion', price: 7, isDefault: true }],
-      tags: ['homemade'],
-      dietary: { isGlutenFree: false, isVegetarian: true, isVegan: false }
+      name: "Riz au Lait Vanillé",
+      description: "Caramel beurre salé, spéculoos",
+      category: "desserts",
+      priceVariants: [{ size: "portion", price: 7, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["maison", "comfort"]
     }
   ],
 
   // FROMAGES
   cheeses: [
     {
-      name: 'Comté Affiné 18 mois',
-      description: 'Comté affiné 18 mois',
-      category: 'cheeses',
-      priceVariants: [{ size: 'portion', price: 6, isDefault: true }],
-      tags: ['premium', 'artisanal'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: false }
+      name: "Comté Affiné 18 mois",
+      description: "Comté affiné 18 mois",
+      category: "cheeses",
+      priceVariants: [{ size: "portion", price: 6, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["fromage", "premium", "affiné"]
     },
     {
-      name: 'Saint Nectaire Fermier',
-      description: 'Saint Nectaire fermier',
-      category: 'cheeses',
-      priceVariants: [{ size: 'portion', price: 6, isDefault: true }],
-      tags: ['artisanal'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: false }
-    },
-    {
-      name: 'Plateau de Fromages',
-      description: 'Comté 18 mois et Saint Nectaire fermier',
-      category: 'cheeses',
-      priceVariants: [{ size: 'plateau', price: 10, isDefault: true }],
-      tags: ['premium'],
-      dietary: { isGlutenFree: true, isVegetarian: true, isVegan: false }
+      name: "Saint Nectaire Fermier",
+      description: "Saint Nectaire fermier",
+      category: "cheeses",
+      priceVariants: [{ size: "portion", price: 6, isDefault: true }],
+      dietary: { isVegetarian: true, isVegan: false, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["fromage", "fermier", "artisanal"]
     }
   ],
 
-  // VINS ROUGES
-  wines_red: [
+  // VINS ROSÉS
+  wines_rose: [
     {
-      name: 'Côtes de Bordeaux "Pirouette"',
-      description: 'Château Les Vieux Moulins (Bio)',
-      category: 'wines_red',
+      name: "Gris de Nathalie",
+      description: "Domaine du Petit Chaumont - IGP Sable de Camargue (Bio)",
+      category: "wines_rose",
+      subcategory: "bio",
       priceVariants: [
-        { size: '12.5cl', price: 5, isDefault: false },
-        { size: '35cl', price: 11, isDefault: true },
-        { size: '75cl', price: 22, isDefault: false }
+        { size: "12.5cl", price: 5, isDefault: false },
+        { size: "35cl", price: 11, isDefault: true },
+        { size: "75cl", price: 22, isDefault: false }
       ],
-      tags: ['bio'],
-      dietary: { isOrganic: true },
-      nutrition: { alcohol: 13.5 }
+      nutrition: { alcohol: 12.5 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "rosé", "Camargue"]
     },
     {
-      name: 'Côtes de Castillon "Y\'a de la Joie"',
-      description: 'Cousins & Co x Château Beynat (Vin Nature)',
-      category: 'wines_red',
+      name: "Côtes de Provence Symphonie",
+      description: "Château Sainte Marguerite - Cru Classé (Bio)",
+      category: "wines_rose",
+      subcategory: "bio",
       priceVariants: [
-        { size: '12.5cl', price: 6, isDefault: false },
-        { size: '35cl', price: 13, isDefault: true },
-        { size: '75cl', price: 26, isDefault: false }
+        { size: "12.5cl", price: 7, isDefault: false },
+        { size: "35cl", price: 16, isDefault: true },
+        { size: "75cl", price: 32, isDefault: false }
       ],
-      tags: ['nature'],
-      nutrition: { alcohol: 14 }
-    },
-    {
-      name: 'Bourgueil "Trinch"',
-      description: 'Catherine & Pierre Breton (Bio)',
-      category: 'wines_red',
-      priceVariants: [
-        { size: '12.5cl', price: 7, isDefault: false },
-        { size: '35cl', price: 15, isDefault: true },
-        { size: '75cl', price: 30, isDefault: false }
-      ],
-      tags: ['bio', 'premium'],
-      dietary: { isOrganic: true },
-      nutrition: { alcohol: 13 }
+      nutrition: { alcohol: 13 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "rosé", "premium", "Provence"]
     }
   ],
 
   // VINS BLANCS
   wines_white: [
     {
-      name: 'Côteaux de Vendômois',
-      description: 'Domaine du Four à Chaux - Chenin (Culture Raisonnée)',
-      category: 'wines_white',
+      name: "Côteaux de Vendômois",
+      description: "Domaine du Four à Chaux - Chenin (Culture Raisonnée)",
+      category: "wines_white",
+      subcategory: "Loire",
       priceVariants: [
-        { size: '12.5cl', price: 5, isDefault: false },
-        { size: '35cl', price: 11, isDefault: true },
-        { size: '75cl', price: 22, isDefault: false }
+        { size: "12.5cl", price: 5, isDefault: false },
+        { size: "35cl", price: 11, isDefault: true },
+        { size: "75cl", price: 22, isDefault: false }
       ],
-      nutrition: { alcohol: 12.5 }
+      nutrition: { alcohol: 12.5 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["blanc", "Loire", "Chenin"]
     },
     {
-      name: 'Menetou-Salon "Remoortere"',
-      description: 'Sauvignon (Bio)',
-      category: 'wines_white',
+      name: "Menetou-Salon Remoortere",
+      description: "Sauvignon (Bio)",
+      category: "wines_white",
+      subcategory: "bio",
       priceVariants: [
-        { size: '12.5cl', price: 8, isDefault: false },
-        { size: '35cl', price: 17, isDefault: true },
-        { size: '75cl', price: 34, isDefault: false }
+        { size: "12.5cl", price: 8, isDefault: false },
+        { size: "35cl", price: 17, isDefault: true },
+        { size: "75cl", price: 34, isDefault: false }
       ],
-      tags: ['bio'],
-      dietary: { isOrganic: true },
-      nutrition: { alcohol: 13 }
+      nutrition: { alcohol: 13 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "blanc", "Sauvignon"]
+    },
+    {
+      name: "Mas Foulaquier Into The White",
+      description: "Vin Nature Non Filtré - Vin de France",
+      category: "wines_white",
+      subcategory: "nature",
+      priceVariants: [
+        { size: "12.5cl", price: 7, isDefault: false },
+        { size: "35cl", price: 15, isDefault: true },
+        { size: "75cl", price: 30, isDefault: false }
+      ],
+      nutrition: { alcohol: 13.5 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["nature", "blanc", "non filtré"]
+    },
+    {
+      name: "Ailleurs Chardonnay",
+      description: "Domaine Attilon - Chardonnay (Bio)",
+      category: "wines_white",
+      subcategory: "bio",
+      priceVariants: [
+        { size: "12.5cl", price: 6.5, isDefault: false },
+        { size: "35cl", price: 14, isDefault: true },
+        { size: "75cl", price: 28, isDefault: false }
+      ],
+      nutrition: { alcohol: 13 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "blanc", "Chardonnay"]
+    }
+  ],
+
+  // VINS ROUGES
+  wines_red: [
+    {
+      name: "Côtes de Bordeaux Pirouette",
+      description: "Château Les Vieux Moulins (Bio)",
+      category: "wines_red",
+      subcategory: "bio",
+      priceVariants: [
+        { size: "12.5cl", price: 5, isDefault: false },
+        { size: "35cl", price: 11, isDefault: true },
+        { size: "75cl", price: 22, isDefault: false }
+      ],
+      nutrition: { alcohol: 13.5 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "rouge", "Bordeaux"]
+    },
+    {
+      name: "Côtes de Castillon Y'a de la Joie",
+      description: "Cousins & Co x Château Beynat (Vin Nature)",
+      category: "wines_red",
+      subcategory: "nature",
+      priceVariants: [
+        { size: "12.5cl", price: 6, isDefault: false },
+        { size: "35cl", price: 13, isDefault: true },
+        { size: "75cl", price: 26, isDefault: false }
+      ],
+      nutrition: { alcohol: 14 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["nature", "rouge", "Bordeaux"]
+    },
+    {
+      name: "Bourgueil Trinch",
+      description: "Catherine & Pierre Breton (Bio)",
+      category: "wines_red",
+      subcategory: "bio",
+      priceVariants: [
+        { size: "12.5cl", price: 7, isDefault: false },
+        { size: "35cl", price: 15, isDefault: true },
+        { size: "75cl", price: 30, isDefault: false }
+      ],
+      nutrition: { alcohol: 13 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "rouge", "Loire"]
+    },
+    {
+      name: "Côte Roannaise Éclat de Granite",
+      description: "Domaine Sérol - Gamay (Bio)",
+      category: "wines_red",
+      subcategory: "bio",
+      priceVariants: [
+        { size: "12.5cl", price: 7, isDefault: false },
+        { size: "35cl", price: 15, isDefault: true },
+        { size: "75cl", price: 30, isDefault: false }
+      ],
+      nutrition: { alcohol: 12.5 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "rouge", "Gamay"]
+    }
+  ],
+
+  // CHAMPAGNE & PÉTILLANTS
+  wines_sparkling: [
+    {
+      name: "Vouvray Pétillant La Dilettante",
+      description: "Catherine & Pierre Breton (Bio)",
+      category: "wines_sparkling",
+      subcategory: "bio",
+      priceVariants: [
+        { size: "12.5cl", price: 8, isDefault: false },
+        { size: "75cl", price: 32, isDefault: true }
+      ],
+      nutrition: { alcohol: 12 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "pétillant", "Loire"]
+    },
+    {
+      name: "Champagne Laurent Perrier",
+      description: "La Cuvée (Culture Raisonnée)",
+      category: "wines_sparkling",
+      subcategory: "champagne",
+      priceVariants: [
+        { size: "12.5cl", price: 12, isDefault: false },
+        { size: "75cl", price: 70, isDefault: true }
+      ],
+      nutrition: { alcohol: 12 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["champagne", "premium"]
     }
   ],
 
   // COCKTAILS
   cocktails: [
     {
-      name: 'Bramble',
-      description: 'London Dry Gin, crème de mûre, citron vert, simple sirop',
-      category: 'cocktails',
-      priceVariants: [{ size: '25cl', price: 10, isDefault: true }],
-      tags: ['signature'],
-      nutrition: { alcohol: 20 }
+      name: "Bramble",
+      description: "London Dry Gin, crème de mûre, citron vert, simple sirop",
+      category: "cocktails",
+      priceVariants: [{ size: "25cl", price: 10, isDefault: true }],
+      nutrition: { alcohol: 20 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["signature", "fruité"],
+      availability: {
+        isAvailable: true,
+        availableDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+        availableTimeSlots: { lunch: false, dinner: true, allDay: false }
+      }
     },
     {
-      name: 'Basil Smash',
-      description: 'Gin, basilic, citron vert, simple sirop',
-      category: 'cocktails',
-      priceVariants: [{ size: '25cl', price: 10, isDefault: true }],
-      tags: ['fresh'],
-      nutrition: { alcohol: 22 }
+      name: "Basil Smash",
+      description: "Gin, basilic, citron vert, simple sirop",
+      category: "cocktails",
+      priceVariants: [{ size: "25cl", price: 10, isDefault: true }],
+      nutrition: { alcohol: 22 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["fresh", "herbes"],
+      availability: {
+        isAvailable: true,
+        availableDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+        availableTimeSlots: { lunch: false, dinner: true, allDay: false }
+      }
     },
     {
-      name: 'Expresso Martini',
-      description: 'Vodka, liqueur de café, shot d\'espresso, simple sirop',
-      category: 'cocktails',
-      priceVariants: [{ size: '25cl', price: 11, isDefault: true }],
-      tags: ['popular', 'coffee'],
-      nutrition: { alcohol: 25 }
+      name: "Expresso Martini",
+      description: "Vodka, liqueur de café, shot d'espresso, simple sirop",
+      category: "cocktails",
+      priceVariants: [{ size: "25cl", price: 11, isDefault: true }],
+      nutrition: { alcohol: 25 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["popular", "café"],
+      availability: {
+        isAvailable: true,
+        availableDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+        availableTimeSlots: { lunch: false, dinner: true, allDay: false }
+      }
     },
     {
-      name: 'Porn Star Martini',
-      description: 'Vodka, Passoa, sirop de vanille, fruit de la passion, Vouvray pétillant',
-      category: 'cocktails',
-      priceVariants: [{ size: '25cl', price: 12, isDefault: true }],
-      tags: ['signature', 'exotic'],
-      nutrition: { alcohol: 18 }
+      name: "Porn Star Martini",
+      description: "Vodka, Passoa, sirop de vanille, fruit de la passion, Vouvray pétillant",
+      category: "cocktails",
+      priceVariants: [{ size: "25cl", price: 12, isDefault: true }],
+      nutrition: { alcohol: 18 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["signature", "exotique"],
+      availability: {
+        isAvailable: true,
+        availableDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+        availableTimeSlots: { lunch: false, dinner: true, allDay: false }
+      }
     },
     {
-      name: 'Negroni Classico',
-      description: 'Gin, Campari, Vermouth Otto\'s',
-      category: 'cocktails',
-      priceVariants: [{ size: '25cl', price: 11, isDefault: true }],
-      tags: ['classic'],
-      nutrition: { alcohol: 28 }
+      name: "Negroni Classico",
+      description: "Gin, Campari, Vermouth Otto's",
+      category: "cocktails",
+      priceVariants: [{ size: "25cl", price: 11, isDefault: true }],
+      nutrition: { alcohol: 28 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["classique", "amer"],
+      availability: {
+        isAvailable: true,
+        availableDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+        availableTimeSlots: { lunch: false, dinner: true, allDay: false }
+      }
     }
   ],
 
   // MOCKTAILS
   mocktails: [
     {
-      name: 'Sweet Berry',
-      description: 'Vermouth Otto\'s, crème de framboise, Perrier, Peychaud bitter, citron vert, simple sirop',
-      category: 'mocktails',
-      priceVariants: [{ size: '25cl', price: 10, isDefault: true }],
-      tags: ['fruity', 'fresh'],
-      nutrition: { alcohol: 0 }
+      name: "Sweet Berry",
+      description: "Vermouth Otto's, crème de framboise, Perrier, Peychaud bitter, citron vert, simple sirop",
+      category: "mocktails",
+      priceVariants: [{ size: "25cl", price: 10, isDefault: true }],
+      nutrition: { alcohol: 0 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["sans alcool", "fruité"]
     },
     {
-      name: 'Tiki Boubou',
-      description: 'Tonka, ananas, orange, citron vert',
-      category: 'mocktails',
-      priceVariants: [{ size: '25cl', price: 7, isDefault: true }],
-      tags: ['tropical', 'exotic'],
-      nutrition: { alcohol: 0 }
+      name: "Tiki Boubou",
+      description: "Tonka, ananas, orange, citron vert",
+      category: "mocktails",
+      priceVariants: [{ size: "25cl", price: 7, isDefault: true }],
+      nutrition: { alcohol: 0 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["sans alcool", "tropical"]
     },
     {
-      name: 'Ginger Mojito',
-      description: 'Ginger beer, menthe, citron vert, sucre',
-      category: 'mocktails',
-      priceVariants: [{ size: '25cl', price: 7, isDefault: true }],
-      tags: ['fresh', 'spicy'],
-      nutrition: { alcohol: 0 }
+      name: "Ginger Mojito",
+      description: "Ginger beer, menthe, citron vert, sucre",
+      category: "mocktails",
+      priceVariants: [{ size: "25cl", price: 7, isDefault: true }],
+      nutrition: { alcohol: 0 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: true, spicyLevel: 1 },
+      tags: ["sans alcool", "fresh", "gingembre"]
     }
   ],
 
   // BIÈRES
   beers: [
     {
-      name: 'Stella Artois',
-      description: 'Bière blonde belge',
-      category: 'beers',
+      name: "Stella Artois",
+      description: "Bière blonde belge",
+      category: "beers",
+      subcategory: "pression",
       priceVariants: [
-        { size: '25cl (pression)', price: 4, isDefault: true },
-        { size: '50cl (pression)', price: 6.5, isDefault: false }
+        { size: "25cl pression", price: 4, isDefault: true },
+        { size: "50cl pression", price: 6.5, isDefault: false }
       ],
-      nutrition: { alcohol: 5.2 }
+      nutrition: { alcohol: 5.2 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["pression", "belge"]
     },
     {
-      name: 'Deck & Donohue "Mission" Pale Ale',
-      description: 'Pale Ale artisanale (Bio)',
-      category: 'beers',
+      name: "Deck & Donohue Mission Pale Ale",
+      description: "Pale Ale artisanale (Bio)",
+      category: "beers",
+      subcategory: "artisanale",
       priceVariants: [
-        { size: '25cl', price: 4.8, isDefault: true },
-        { size: '33cl', price: 8.5, isDefault: false }
+        { size: "25cl pression", price: 4.8, isDefault: true },
+        { size: "33cl bouteille", price: 8.5, isDefault: false }
       ],
-      tags: ['bio', 'artisanal'],
-      dietary: { isOrganic: true },
-      nutrition: { alcohol: 4.8 }
+      nutrition: { alcohol: 4.8 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: false, isOrganic: true, isSpicy: false, spicyLevel: 0 },
+      tags: ["bio", "artisanale", "pale ale"]
     },
     {
-      name: 'Demory Blanche',
-      description: 'Bière blanche artisanale',
-      category: 'beers',
+      name: "Demory Blanche",
+      description: "Bière blanche artisanale",
+      category: "beers",
+      subcategory: "artisanale",
       priceVariants: [
-        { size: '25cl', price: 5, isDefault: true },
-        { size: '33cl', price: 9, isDefault: false }
+        { size: "25cl pression", price: 5, isDefault: true },
+        { size: "33cl bouteille", price: 9, isDefault: false }
       ],
-      tags: ['artisanal'],
-      nutrition: { alcohol: 4.5 }
+      nutrition: { alcohol: 4.5 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["artisanale", "blanche"]
+    },
+    {
+      name: "Brewdog Punk I.P.A",
+      description: "IPA artisanale",
+      category: "beers",
+      subcategory: "IPA",
+      priceVariants: [
+        { size: "25cl pression", price: 5, isDefault: true },
+        { size: "33cl bouteille", price: 9, isDefault: false }
+      ],
+      nutrition: { alcohol: 5.4 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["IPA", "artisanale", "houblonnée"]
+    },
+    {
+      name: "Corona",
+      description: "Bière blonde mexicaine",
+      category: "beers",
+      subcategory: "bouteille",
+      priceVariants: [{ size: "33cl bouteille", price: 6.5, isDefault: true }],
+      nutrition: { alcohol: 4.5 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["mexicaine", "lime"]
+    },
+    {
+      name: "Corona 0%",
+      description: "Bière sans alcool",
+      category: "beers",
+      subcategory: "sans alcool",
+      priceVariants: [{ size: "33cl bouteille", price: 6.5, isDefault: true }],
+      nutrition: { alcohol: 0 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: false, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["sans alcool", "healthy"]
+    },
+    {
+      name: "Cidre Sassy",
+      description: "Cidre artisanal français",
+      category: "beers",
+      subcategory: "cidre",
+      priceVariants: [{ size: "33cl bouteille", price: 6.5, isDefault: true }],
+      nutrition: { alcohol: 4.5 },
+      dietary: { isVegetarian: true, isVegan: true, isGlutenFree: true, isOrganic: false, isSpicy: false, spicyLevel: 0 },
+      tags: ["cidre", "français"]
     }
   ]
 };
 
 const seedMenuData = async () => {
   try {
-    console.log('🚀 Initialisation des données du menu...');
+    console.log('🚀 Initialisation du menu Pause Café complet...');
     
     // Connexion MongoDB
     await mongoose.connect(config.mongoUri);
@@ -570,7 +775,17 @@ const seedMenuData = async () => {
           ...items[i],
           restaurantId: restaurant._id,
           createdBy: manager._id,
-          displayOrder: i + 1
+          displayOrder: i + 1,
+          isActive: true,
+          availability: items[i].availability || {
+            isAvailable: true,
+            availableDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+            availableTimeSlots: {
+              lunch: true,
+              dinner: true,
+              allDay: true
+            }
+          }
         };
         
         try {
@@ -586,7 +801,7 @@ const seedMenuData = async () => {
     // Statistiques finales
     const finalCount = await MenuItem.countDocuments({ restaurantId: restaurant._id });
     
-    console.log('\n🎉 Initialisation du menu terminée !');
+    console.log('\n🎉 Menu Pause Café créé avec succès !');
     console.log(`📊 Total items créés: ${totalCreated}`);
     console.log(`📊 Total items dans la base: ${finalCount}`);
     
@@ -629,10 +844,12 @@ const seedMenuData = async () => {
     console.log(`   Végétarien: ${vegetarianCount} items`);
     console.log(`   Végan: ${veganCount} items`);
     
-    console.log('\n🔗 Testez votre API Menu:');
+    console.log('\n🔗 Testez votre API Menu Pause Café:');
     console.log('Tous les items: GET http://localhost:3000/api/menu');
-    console.log('Items par catégorie: GET http://localhost:3000/api/menu?category=mains');
+    console.log('Items par catégorie: GET http://localhost:3000/api/menu?category=cocktails');
     console.log('Recherche: GET http://localhost:3000/api/menu/search?q=burger');
+    console.log('Végétarien: GET http://localhost:3000/api/menu?isVegetarian=true');
+    console.log('Catégories: GET http://localhost:3000/api/menu/categories');
     
     await mongoose.connection.close();
     console.log('\n✅ Script terminé avec succès !');
@@ -651,7 +868,7 @@ const seedMenuData = async () => {
 
 // Lancer le script si exécuté directement
 if (require.main === module) {
-  console.log('🎬 Lancement du script de création du menu...');
+  console.log('🎬 Lancement du script de création du menu Pause Café complet...');
   seedMenuData();
 }
 
