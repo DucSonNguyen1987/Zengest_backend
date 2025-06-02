@@ -62,11 +62,11 @@ const orderItemSchema = new mongoose.Schema({
 
 // Schéma principal pour une commande
 const orderSchema = new mongoose.Schema({
-  // Numéro de commande unique
+  // Numéro de commande unique - CORRIGÉ: pas required ici car généré automatiquement
   orderNumber: {
     type: String,
-    required: true,
-    unique: true
+    unique: true,
+    sparse: true // Permet les valeurs null pendant la création
   },
   
   // Restaurant concerné
@@ -268,26 +268,53 @@ orderSchema.index({ restaurantId: 1 });
 orderSchema.index({ restaurantId: 1, status: 1 });
 orderSchema.index({ restaurantId: 1, 'timestamps.ordered': -1 });
 orderSchema.index({ floorPlanId: 1, tableId: 1 });
-orderSchema.index({ orderNumber: 1 });
 orderSchema.index({ 'customer.phone': 1 });
 orderSchema.index({ 'service.assignedServer': 1 });
 
-// Middleware pour générer le numéro de commande
+// Middleware pour générer le numéro de commande - VERSION CORRIGÉE
 orderSchema.pre('save', async function(next) {
   if (this.isNew && !this.orderNumber) {
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-    
-    // Compter les commandes du jour
-    const count = await this.constructor.countDocuments({
-      restaurantId: this.restaurantId,
-      createdAt: {
-        $gte: new Date(today.setHours(0, 0, 0, 0)),
-        $lt: new Date(today.setHours(23, 59, 59, 999))
+    try {
+      let attempts = 0;
+      const maxAttempts = 5;
+      
+      while (attempts < maxAttempts) {
+        const today = new Date();
+        const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+        
+        // Créer des nouvelles instances de Date pour éviter les mutations
+        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+        const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+        
+        // Compter les commandes du jour pour ce restaurant
+        const count = await this.constructor.countDocuments({
+          restaurantId: this.restaurantId,
+          createdAt: {
+            $gte: startOfDay,
+            $lt: endOfDay
+          }
+        });
+        
+        const orderNumber = `${dateStr}-${(count + 1).toString().padStart(4, '0')}`;
+        
+        // Vérifier l'unicité
+        const existing = await this.constructor.findOne({ orderNumber });
+        if (!existing) {
+          this.orderNumber = orderNumber;
+          console.log(`🔢 OrderNumber généré: ${this.orderNumber} (tentative ${attempts + 1})`);
+          break;
+        }
+        
+        attempts++;
+        if (attempts >= maxAttempts) {
+          throw new Error(`Impossible de générer un orderNumber unique après ${maxAttempts} tentatives`);
+        }
       }
-    });
-    
-    this.orderNumber = `${dateStr}-${(count + 1).toString().padStart(4, '0')}`;
+      
+    } catch (error) {
+      console.error('❌ Erreur lors de la génération du orderNumber:', error);
+      return next(error);
+    }
   }
   
   next();
