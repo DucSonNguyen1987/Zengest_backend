@@ -15,6 +15,7 @@ const restaurantRoutes = require('./src/routes/restaurants');
 const floorPlanRoutes = require('./src/routes/floorplans');
 const menuRoutes = require('./src/routes/menu');
 const orderRoutes = require('./src/routes/orders');
+const reservationRoutes = require('./src/routes/reservations');
 
 // Import des middlewares personnalisés
 const { auth } = require('./src/middleware/auth');
@@ -67,20 +68,20 @@ const corsOptions = {
     const allowedOrigins = [
       config.frontendUrl,
       'http://localhost:3000',
-      'http://localhost:3001', 
+      'http://localhost:3001',
       'http://localhost:5173', // Vite
       'http://localhost:4173', // Vite preview
       'https://zengest.vercel.app',
       'https://zengest-admin.vercel.app'
     ];
-    
+
     // En développement, autoriser toutes les origines localhost
     if (config.nodeEnv === 'development') {
       if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1')) {
         return callback(null, true);
       }
     }
-    
+
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -110,13 +111,13 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 // Middleware de parsing avec limites de sécurité
-app.use(express.json({ 
+app.use(express.json({
   limit: '10mb',
   strict: true,
   type: 'application/json'
 }));
 
-app.use(express.urlencoded({ 
+app.use(express.urlencoded({
   extended: true,
   limit: '10mb',
   parameterLimit: 1000
@@ -199,7 +200,7 @@ const createLoggerMiddleware = () => {
   }
 
   // Format personnalisé pour les logs
-  const logFormat = config.nodeEnv === 'development' 
+  const logFormat = config.nodeEnv === 'development'
     ? ':method :url :status :response-time ms - :res[content-length] - :remote-addr'
     : ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" :response-time ms';
 
@@ -209,9 +210,9 @@ const createLoggerMiddleware = () => {
       stream: {
         write: (message) => {
           // Colorisation en développement
-          const colorCode = message.includes(' 2') ? '\x1b[32m' : 
-                           message.includes(' 3') ? '\x1b[33m' : 
-                           message.includes(' 4') || message.includes(' 5') ? '\x1b[31m' : '\x1b[0m';
+          const colorCode = message.includes(' 2') ? '\x1b[32m' :
+            message.includes(' 3') ? '\x1b[33m' :
+              message.includes(' 4') || message.includes(' 5') ? '\x1b[31m' : '\x1b[0m';
           console.log(`${colorCode}${message.trim()}\x1b[0m`);
         }
       }
@@ -354,6 +355,28 @@ app.get('/api/docs', (req, res) => {
       utilities: {
         health: 'GET /health',
         docs: 'GET /docs'
+      },
+      reservations: {
+        list: 'GET /reservations',
+        byDate: 'GET /reservations/date/:date',
+        get: 'GET /reservations/:id',
+        create: 'POST /reservations',
+        update: 'PUT /reservations/:id',
+        updateStatus: 'PATCH /reservations/:id/status',
+        assignTable: 'PATCH /reservations/:id/assign-table',
+        delete: 'DELETE /reservations/:id'
+      },
+      notifications: {
+        sendConfirmation: 'POST /notifications/reservations/:id/confirmation',
+        sendReminder: 'POST /notifications/reservations/:id/reminder',
+        sendCancellation: 'POST /notifications/reservations/:id/cancellation',
+        batchReminders: 'POST /notifications/batch/reminders',
+        history: 'GET /notifications/reservations/:id/history',
+        stats: 'GET /notifications/stats',
+        test: 'POST /notifications/test',
+        retry: 'POST /notifications/retry/:id/:type',
+        schedulerStatus: 'GET /notifications/scheduler/status',
+        runJob: 'POST /notifications/scheduler/run/:job'
       }
     },
     authentication: {
@@ -376,6 +399,8 @@ app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/floor-plans', floorPlanRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/reservations', reservationsRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // Route racine avec informations générales
 app.get('/', (req, res) => {
@@ -389,10 +414,13 @@ app.get('/', (req, res) => {
       'Système de commandes en temps réel',
       'Plans de salle interactifs avec tables',
       'Gestion complète du menu avec variantes de prix',
+      'Système de réservations avec notifications email',  
+  'Notifications automatisées par email (Nodemailer)', 
+  'Tâches automatisées (rappels, nettoyage)',
       'Analytics et statistiques détaillées',
       'Système de permissions par rôles',
       'Validation robuste des données',
-      'Rate limiting et sécurité avancée'
+      'Rate limiting et sécurité avancée',
     ],
     documentation: {
       health: '/api/health',
@@ -422,7 +450,7 @@ app.use('/public', express.static(path.join(__dirname, 'public'), {
 // Middleware pour gérer les routes non trouvées
 app.use('*', (req, res) => {
   console.warn(`Route non trouvée: ${req.method} ${req.originalUrl} depuis IP: ${req.ip}`);
-  
+
   res.status(404).json({
     success: false,
     message: `Route ${req.originalUrl} non trouvée`,
@@ -460,9 +488,9 @@ app.use((err, req, res, next) => {
     timestamp: new Date().toISOString(),
     requestId: res.get('X-Request-ID')
   };
-  
+
   console.error('🚨 Erreur détectée:', errorInfo);
-  
+
   // Erreur de validation Mongoose
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map(e => ({
@@ -470,7 +498,7 @@ app.use((err, req, res, next) => {
       message: e.message,
       value: e.value
     }));
-    
+
     return res.status(400).json({
       success: false,
       message: 'Erreur de validation des données',
@@ -478,7 +506,7 @@ app.use((err, req, res, next) => {
       type: 'ValidationError'
     });
   }
-  
+
   // Erreur de cast MongoDB (ID invalide)
   if (err.name === 'CastError') {
     return res.status(400).json({
@@ -488,7 +516,7 @@ app.use((err, req, res, next) => {
       type: 'CastError'
     });
   }
-  
+
   // Erreur de duplication MongoDB (clé unique)
   if (err.code === 11000) {
     const field = Object.keys(err.keyValue)[0];
@@ -500,7 +528,7 @@ app.use((err, req, res, next) => {
       type: 'DuplicateError'
     });
   }
-  
+
   // Erreur JWT
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
@@ -509,7 +537,7 @@ app.use((err, req, res, next) => {
       type: 'AuthenticationError'
     });
   }
-  
+
   if (err.name === 'TokenExpiredError') {
     return res.status(401).json({
       success: false,
@@ -517,7 +545,7 @@ app.use((err, req, res, next) => {
       type: 'AuthenticationError'
     });
   }
-  
+
   // Erreur de limite de taille
   if (err.type === 'entity.too.large') {
     return res.status(413).json({
@@ -527,7 +555,7 @@ app.use((err, req, res, next) => {
       type: 'SizeError'
     });
   }
-  
+
   // Erreur CORS
   if (err.message.includes('CORS')) {
     return res.status(403).json({
@@ -536,7 +564,7 @@ app.use((err, req, res, next) => {
       type: 'CORSError'
     });
   }
-  
+
   // Erreur de connexion base de données
   if (err.name === 'MongoNetworkError' || err.name === 'MongooseServerSelectionError') {
     return res.status(503).json({
@@ -545,7 +573,7 @@ app.use((err, req, res, next) => {
       type: 'DatabaseError'
     });
   }
-  
+
   // Gestion spéciale pour les erreurs de développement
   if (config.nodeEnv === 'development') {
     return res.status(err.status || 500).json({
@@ -563,7 +591,7 @@ app.use((err, req, res, next) => {
       }
     });
   }
-  
+
   // Erreur générique pour la production
   res.status(err.status || 500).json({
     success: false,
