@@ -121,7 +121,8 @@ router.get('/:id', requireSameRestaurant, async (req, res) => {
             found: !!floorPlan,
             id: floorPlan?._id?.toString(),
             restaurantId: floorPlan?.restaurantId?._id?.toString(),
-            restaurantName: floorPlan?.restaurantId?.name
+            restaurantName: floorPlan?.restaurantId?.name,
+            tablesCount: floorPlan?.tables?.length || 0
         });
 
         if (!floorPlan) {
@@ -150,19 +151,35 @@ router.get('/:id', requireSameRestaurant, async (req, res) => {
             console.log('❌ Accès refusé - 403');
             return res.status(403).json({
                 success: false,
-                message: 'Accès non autorisé à ce plan de salle',
-                debug: {
-                    userRestaurantId,
-                    floorPlanRestaurantId,
-                    userRole: req.user.role
-                }
+                message: 'Accès non autorisé à ce plan de salle'
             });
         }
 
-        console.log('✅ Accès autorisé, retour des données');
+        // S'assurer que les tables ont des _id valides et visibles
+        const floorPlanData = floorPlan.toPublicJSON();
+        
+        // CORRECTION : S'assurer que chaque table a un _id visible
+        if (floorPlanData.tables && floorPlanData.tables.length > 0) {
+            floorPlanData.tables = floorPlanData.tables.map(table => ({
+                _id: table._id.toString(), // S'assurer que l'ID est en string
+                number: table.number,
+                capacity: table.capacity,
+                shape: table.shape,
+                position: table.position,
+                rotation: table.rotation,
+                dimensions: table.dimensions,
+                status: table.status,
+                isActive: table.isActive
+            }));
+        }
+
+        console.log('✅ Accès autorisé, retour des données avec', floorPlanData.tables?.length || 0, 'tables');
+        
         res.json({
             success: true,
-            data: { floorPlan: floorPlan.toPublicJSON() }
+            data: { 
+                floorPlan: floorPlanData
+            }
         });
     } catch (error) {
         console.error('💥 Erreur dans GET /:id:', error);
@@ -275,53 +292,91 @@ router.post('/', requireManagement, validateCreateFloorPlan, validateGeometry, a
 // PUT /api/floor-plans/:id => MAJ un plan de salle
 router.put('/:id', requireManagement, validateUpdateFloorPlan, validateGeometry, async (req, res) => {
     try {
+        console.log('🔧 DEBUG PUT /:id - Début de la route', {
+            planId: req.params.id,
+            userRole: req.user?.role,
+            userRestaurantId: req.user?.restaurantId?._id?.toString(),
+            bodyKeys: Object.keys(req.body)
+        });
+
         const floorPlan = await FloorPlan.findById(req.params.id);
 
         if (!floorPlan) {
+            console.log('❌ Plan de salle non trouvé:', req.params.id);
             return res.status(404).json({
                 success: false,
                 message: 'Plan de salle non trouvé'
             });
         }
 
-        // Vérifier les permissions de modification
-        if (req.user.role !== USER_ROLES.ADMIN && // Corrigé la faute de frappe
-            req.user.restaurantId?._id?.toString() !== floorPlan.restaurantId.toString()
-        ) {
+        console.log('📋 DEBUG Plan trouvé:', {
+            planId: floorPlan._id.toString(),
+            planName: floorPlan.name,
+            planRestaurantId: floorPlan.restaurantId.toString()
+        });
+
+        // Vérifier les permissions de modification avec debugging amélioré
+        const userRestaurantId = req.user.restaurantId?._id?.toString() || req.user.restaurantId?.toString();
+        const planRestaurantId = floorPlan.restaurantId.toString();
+        const isAdmin = req.user.role === USER_ROLES.ADMIN;
+        const hasAccess = isAdmin || userRestaurantId === planRestaurantId;
+
+        console.log('🔐 DEBUG Vérification permissions PUT:', {
+            isAdmin,
+            userRestaurantId,
+            planRestaurantId,
+            hasAccess,
+            userRole: req.user.role
+        });
+
+        if (!hasAccess) {
+            console.log('❌ Permissions insuffisantes pour modification');
             return res.status(403).json({
                 success: false,
-                message: 'Permissions insuffisantes pour modifier ce plan de salle'
+                message: 'Permissions insuffisantes pour modifier ce plan de salle',
+                debug: process.env.NODE_ENV === 'development' ? {
+                    userRestaurantId,
+                    planRestaurantId,
+                    userRole: req.user.role
+                } : undefined
             });
         }
 
-        // Interdire la modification du restaurant
+        // Interdire la modification du restaurant et créateur
         delete req.body.restaurantId;
         delete req.body.createdBy;
 
         // MAJ le modificateur
         req.body.lastModifiedBy = req.user._id;
 
-        // Incrémenter la version
-        if (req.body.tables || req.body.obstacles) { // Corrigé la faute de frappe
+        // Incrémenter la version si tables ou obstacles modifiés
+        if (req.body.tables || req.body.obstacles) {
             req.body.version = (floorPlan.version || 1) + 1;
+            console.log('📈 Version incrémentée:', req.body.version);
         }
+
+        console.log('📝 Modifications à appliquer:', Object.keys(req.body));
 
         // Appliquer les modifications
         Object.assign(floorPlan, req.body);
 
         // Valider les positions des tables si modifiées
         if (req.body.tables) {
+            console.log('🔍 Validation des positions de tables...');
             floorPlan.validateTablePositions();
         }
 
+        console.log('💾 Sauvegarde du plan...');
         await floorPlan.save();
 
+        console.log('👥 Population des références...');
         await floorPlan.populate([
             { path: 'restaurantId', select: 'name' },
             { path: 'createdBy', select: 'firstName lastName' },
             { path: 'lastModifiedBy', select: 'firstName lastName' }
         ]);
 
+        console.log('✅ Plan mis à jour avec succès');
         res.json({
             success: true,
             message: 'Plan de salle mis à jour avec succès',
@@ -329,13 +384,40 @@ router.put('/:id', requireManagement, validateUpdateFloorPlan, validateGeometry,
         });
 
     } catch (error) {
-        console.error('Erreur lors de la mise à jour:', error);
+        console.error('💥 Erreur lors de la mise à jour du plan:', {
+            error: error.message,
+            stack: error.stack,
+            planId: req.params.id,
+            userRole: req.user?.role
+        });
+
+        // Gestion d'erreurs spécifiques
+        if (error.name === 'ValidationError') {
+            const errors = Object.values(error.errors).map(e => e.message);
+            return res.status(400).json({
+                success: false,
+                message: 'Erreur de validation',
+                errors
+            });
+        }
+
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'ID de plan invalide'
+            });
+        }
+
         res.status(400).json({
             success: false,
-            message: error.message || 'Erreur lors de la mise à jour'
+            message: error.message || 'Erreur lors de la mise à jour',
+            ...(process.env.NODE_ENV === 'development' && { 
+                stack: error.stack 
+            })
         });
     }
 });
+
 
 // PATCH /api/floor-plans/:id/default => Définir comme plan par défaut
 router.patch('/:id/default', requireManagement, async (req, res) => {

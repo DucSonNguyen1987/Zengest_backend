@@ -10,7 +10,12 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "seed": "node src/scripts/seedData.js",
-    "seed:dev": "NODE_ENV=development node src/scripts/seedData.js"
+    "seed:complete": "node src/scripts/seedDataComplete.js",
+    "seed:dev": "NODE_ENV=development node src/scripts/seedData.js",
+    "seed:menu": "node src/scripts/seedMenu.js",
+    "test:floorplans": "bash src/scripts/test_floorplans.sh",
+    "test:menu": "bash src/scripts/test_menu.sh",
+    "test:all": "bash src/scripts/test_floorplans.sh && echo '' && bash src/scripts/test_menu.sh"
   },
   "keywords": [
     "restaurant",

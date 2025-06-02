@@ -1,6 +1,5 @@
 const { hasPermission, canAccessRestaurant } = require('../utils/permissions');
 const { USER_ROLES } = require('../utils/constants');
-const { message } = require('antd');
 
 // Middleware pour vérifier les rôles spécifiques
 const requireRole = (...roles) => {
@@ -78,13 +77,13 @@ const requireSameRestaurant = (req, res, next) => {
     });
   }
 
-  // Si un restaurantid est fourni dans les params, vérifier qu'il correspond
-  const targetRestaurantid = req.params.restaurantId || req.boy.restaurantId;
+  // Si un restaurantId est fourni dans les params ou body, vérifier qu'il correspond
+  const targetRestaurantId = req.params.restaurantId || req.body.restaurantId; // CORRIGÉ: req.boy -> req.body
 
-  if(targetRestaurantid && !canAccessRestaurant(req.user.role, req.user.restaurantId._id, targetRestaurantid)) {
+  if (targetRestaurantId && !canAccessRestaurant(req.user.role, req.user.restaurantId._id, targetRestaurantId)) {
     return res.status(403).json({
-      success :false,
-      message :'Accès non autorisé à ce restaurant'
+      success: false, // CORRIGÉ: espacement
+      message: 'Accès non autorisé à ce restaurant'
     });
   }
   

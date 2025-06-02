@@ -87,9 +87,24 @@ const canAccessRestaurant = (userRole, userRestaurantId, targetRestaurantId) => 
     return true;
   }
   
-  // Les autres utilisateurs ne peuvent accéder qu'à leur restaurant
-const userRestId = typeof userRestaurantId === 'object' ? userRestaurantId._id : userRestaurantId;
-  return userRestId?.toString() === targetRestaurantId?.toString();};
+  // Si pas de restaurant assigné à l'utilisateur, refuser l'accès
+  if (!userRestaurantId) {
+    return false;
+  }
+  
+  // Extraire l'ID selon le type (ObjectId ou string)
+  let userRestId;
+  if (typeof userRestaurantId === 'object' && userRestaurantId !== null) {
+    // Si c'est un objet (populé), prendre l'_id
+    userRestId = userRestaurantId._id || userRestaurantId;
+  } else {
+    // Si c'est déjà un string/ObjectId
+    userRestId = userRestaurantId;
+  }
+  
+  // Comparer les IDs en tant que strings
+  return userRestId?.toString() === targetRestaurantId?.toString();
+};
 
 module.exports = {
   ROLE_PERMISSIONS,

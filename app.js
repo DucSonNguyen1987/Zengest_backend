@@ -9,7 +9,8 @@ const config = require('./src/config/config');
 const authRoutes = require('./src/routes/auth');
 const userRoutes = require('./src/routes/users');
 const restaurantRoutes = require('./src/routes/restaurants');
-const floorPlanRoutes = require('./src/routes/floorplans'); // AJOUTÉ
+const floorPlanRoutes = require('./src/routes/floorplans');
+const menuRoutes = require('./src/routes/menu');
 
 const app = express();
 
@@ -74,7 +75,8 @@ if (config.nodeEnv === 'development') {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/restaurants', restaurantRoutes);
-app.use('/api/floor-plans', floorPlanRoutes); // AJOUTÉ
+app.use('/api/floor-plans', floorPlanRoutes); 
+app.use('/api/menu', menuRoutes);
 
 // Route de santé/test
 app.get('/api/health', (req, res) => {
