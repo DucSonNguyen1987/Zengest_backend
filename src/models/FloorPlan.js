@@ -240,14 +240,15 @@ floorPlanSchema.pre('save', async function(next) {
 
 // Virtuel pour obtenir le nombre total de places
 floorPlanSchema.virtual('totalCapacity').get(function() {
-    return this.tables.reduce((total, table) => {
-        return table.isActive ? total + table.capacity : total;
-    }, 0);
+  if (!this.tables || !Array.isArray(this.tables)) {
+    return 0;
+  }
+  return this.tables.reduce((sum, table) => sum + (table.capacity || 0), 0);
 });
 
 // Virtuel pour obtenir le nombre de tables actives
 floorPlanSchema.virtual('activeTablesCount').get(function() {
-    return this.tables.filter(table => table.isActive).length;
+    return (this.tables || []).filter(table => table.isActive).length;
 });
 
 // Méthode pour valider qu'il n'y a pas de collision entre tables
