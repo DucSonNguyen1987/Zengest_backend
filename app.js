@@ -16,6 +16,7 @@ const floorPlanRoutes = require('./src/routes/floorplans');
 const menuRoutes = require('./src/routes/menu');
 const orderRoutes = require('./src/routes/orders');
 const reservationRoutes = require('./src/routes/reservations');
+const notificationRoutes = require ('./src/routes/notifications');
 
 // Import des middlewares personnalisés
 const { auth } = require('./src/middleware/auth');
@@ -399,8 +400,8 @@ app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/floor-plans', floorPlanRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/reservations', reservationsRoutes);
-app.use('/api/notifications', notificationsRoutes);
+app.use('/api/reservations', reservationRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Route racine avec informations générales
 app.get('/', (req, res) => {
