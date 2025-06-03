@@ -146,117 +146,6 @@ const fixOrderController = () => {
 
     res.json({
       success: true,
-      message: `${orders.length} commandes trouvées`,
-      data: responseData
-    });
-
-  } catch (error) {
-    console.error('❌ Erreur getAllOrders:', error.message);
-    console.error('Stack:', error.stack);
-    
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération des commandes',
-      error: process.env.NODE_ENV === 'development' ? {
-        message: error.message,
-        stack: error.stack
-      } : undefined
-    });
-  }
-};
-    
-    // Filtre utilisateur (admin voit tout, autres limitées à leur restaurant)
-    if (req.user.role !== 'admin' && req.user.restaurantId) {
-      filter.restaurantId = req.user.restaurantId;
-    }
-    
-    if (status) filter.status = status;
-    if (tableNumber) filter.tableNumber = tableNumber;
-    if (assignedServer) filter.assignedServer = assignedServer;
-    if (priority) filter.priority = priority;
-    if (customerPhone) filter['customer.phone'] = new RegExp(customerPhone, 'i');
-    
-    // Filtres de montant
-    if (minAmount || maxAmount) {
-      filter['pricing.total'] = {};
-      if (minAmount) filter['pricing.total'].$gte = parseFloat(minAmount);
-      if (maxAmount) filter['pricing.total'].$lte = parseFloat(maxAmount);
-    }
-    
-    // Filtres de date
-    if (dateFrom || dateTo) {
-      filter['timestamps.ordered'] = {};
-      if (dateFrom) filter['timestamps.ordered'].$gte = new Date(dateFrom);
-      if (dateTo) filter['timestamps.ordered'].$lte = new Date(dateTo);
-    }
-
-    console.log('🔍 DEBUG getAllOrders - Filter:', filter);
-
-    // ✅ CORRECTION: Construction de la requête avec gestion d'erreur
-    const sortObject = {};
-    const validSortFields = ['timestamps.ordered', 'pricing.total', 'status', 'tableNumber'];
-    const safeSortBy = validSortFields.includes(sortBy) ? sortBy : 'timestamps.ordered';
-    const safeSortOrder = ['asc', 'desc'].includes(sortOrder) ? sortOrder : 'desc';
-    
-    sortObject[safeSortBy] = safeSortOrder === 'desc' ? -1 : 1;
-
-    console.log('📈 DEBUG getAllOrders - Sort:', sortObject);
-
-    // Exécution de la requête avec timeout et gestion d'erreur
-    const [orders, total] = await Promise.all([
-      Order.find(filter)
-        .populate('items.menuItem', 'name category priceVariants images')
-        .populate('assignedServer', 'firstName lastName')
-        .populate('restaurantId', 'name')
-        .sort(sortObject)
-        .limit(limitNum)
-        .skip((pageNum - 1) * limitNum)
-        .maxTimeMS(10000) // Timeout 10 secondes
-        .lean(), // Optimisation performance
-      
-      Order.countDocuments(filter).maxTimeMS(5000)
-    ]);
-
-    console.log('✅ DEBUG getAllOrders - Résultats:', {
-      ordersCount: orders.length,
-      total,
-      pageNum,
-      limitNum
-    });
-
-    // Construire les filtres disponibles pour le frontend
-    const availableStatuses = await Order.distinct('status', req.user.role !== 'admin' ? { restaurantId: req.user.restaurantId } : {});
-    const availableServers = await Order.distinct('assignedServer', req.user.role !== 'admin' ? { restaurantId: req.user.restaurantId } : {});
-
-    const responseData = {
-      orders,
-      pagination: {
-        currentPage: pageNum,
-        totalPages: Math.ceil(total / limitNum),
-        total,
-        limit: limitNum,
-        hasNext: pageNum < Math.ceil(total / limitNum),
-        hasPrev: pageNum > 1
-      },
-      filters: {
-        availableStatuses,
-        availableServers,
-        appliedFilters: {
-          status, tableNumber, assignedServer, priority,
-          dateFrom, dateTo, minAmount, maxAmount, customerPhone
-        }
-      },
-      summary: {
-        totalOrders: total,
-        currentPageOrders: orders.length,
-        averageOrderValue: orders.length > 0 
-          ? orders.reduce((sum, order) => sum + (order.pricing?.total || 0), 0) / orders.length 
-          : 0
-      }
-    };
-
-    res.json({
-      success: true,
       message: \`\${orders.length} commandes trouvées\`,
       data: responseData
     });
@@ -319,13 +208,13 @@ const testCorrectedOrders = async () => {
   try {
     const API_BASE = 'http://localhost:3000/api';
     
-    // Connexion avec utilisateur staff
+    // Connexion
     const loginResponse = await fetch(\`\${API_BASE}/auth/login\`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'sophie.salle@bistrot-zengest.com', // Staff de salle
-        password: 'Staff123!'
+        email: 'admin@zengest.com',
+        password: 'Admin123!'
       })
     });
     
