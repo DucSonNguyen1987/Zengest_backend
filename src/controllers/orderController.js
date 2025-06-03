@@ -635,6 +635,141 @@ class OrderController {
         };
     }
   }
+
+  /**
+ * Obtenir toutes les commandes avec filtres et pagination
+ */
+static async getAllOrders(req, res) {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      dateFrom,
+      dateTo,
+      restaurantId,
+      sortBy = 'timestamps.ordered',
+      sortOrder = 'desc'
+    } = req.query;
+    
+    // Construction du filtre
+    const filter = { isActive: true };
+    
+    // Filtrer par restaurant selon le rôle
+    if (req.user.role !== 'admin') {
+      filter.restaurantId = req.user.restaurantId;
+    } else if (restaurantId) {
+      filter.restaurantId = restaurantId;
+    }
+    
+    // Filtres optionnels
+    if (status) {
+      filter.status = status;
+    }
+    
+    // Filtre par date
+    if (dateFrom || dateTo) {
+      filter['timestamps.ordered'] = {};
+      if (dateFrom) filter['timestamps.ordered'].$gte = new Date(dateFrom);
+      if (dateTo) filter['timestamps.ordered'].$lte = new Date(dateTo);
+    }
+    
+    console.log('🔍 Orders filter:', filter);
+    
+    // Options de tri
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    
+    // Pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Requête avec population des références
+    const orders = await Order.find(filter)
+      .populate('restaurantId', 'name')
+      .populate('floorPlanId', 'name')
+      .populate('items.menuItem', 'name category')
+      .populate('service.assignedServer', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName')
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(parseInt(limit));
+    
+    // Compter le total pour la pagination
+    const total = await Order.countDocuments(filter);
+    
+    // Transformer les données pour l'API
+    const ordersData = orders.map(order => {
+      const orderData = order.toPublicJSON ? order.toPublicJSON() : order.toObject();
+      
+      // Ajouter des informations calculées
+      orderData.itemsCount = order.items?.length || 0;
+      orderData.totalAmount = order.pricing?.total || 0;
+      orderData.customerInfo = {
+        name: order.customer?.name,
+        numberOfGuests: order.customer?.numberOfGuests
+      };
+      
+      return orderData;
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        orders: ordersData,
+        pagination: {
+          totalPages: Math.ceil(total / parseInt(limit)),
+          currentPage: parseInt(page),
+          total,
+          limit: parseInt(limit)
+        },
+        filters: {
+          status,
+          dateFrom,
+          dateTo,
+          restaurantId: filter.restaurantId
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur getAllOrders:', error);
+    
+    // Log détaillé pour le debugging
+    console.error('Error stack:', error.stack);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    
+    // Erreur spécifique selon le type
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Paramètre invalide dans la requête',
+        error: error.message
+      });
+    }
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Erreur de validation',
+        errors: Object.values(error.errors).map(e => e.message)
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur lors de la récupération des commandes',
+      ...(process.env.NODE_ENV === 'development' && { 
+        error: error.message,
+        stack: error.stack 
+      })
+    });
+  }
+}
+
+
+
+
 }
 
 module.exports = OrderController;

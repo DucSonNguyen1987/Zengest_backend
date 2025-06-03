@@ -24,8 +24,8 @@ router.use(auth);
 router.get('/', requireSameRestaurant, validateOrderFilters, async (req, res) => {
   try {
     const {
-      page = 1,           // ✅ CORRECTION
-      limit = 10,         // ✅ CORRECTION
+      page,
+      limit,
       status,
       tableNumber,
       assignedServer,

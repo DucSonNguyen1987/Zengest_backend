@@ -10,7 +10,7 @@ module.exports = {
   
   // Configuration JWT
   jwtSecret: process.env.JWT_SECRET,
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  jwtExpire: process.env.JWT_EXPIRES_IN || '24h',
   
   // Configuration Frontend
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
