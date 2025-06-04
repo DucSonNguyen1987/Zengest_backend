@@ -1,5 +1,6 @@
 const express = require('express');
 const Restaurant = require('../models/Restaurant');
+const User = require ('../models/User.js');
 const { auth } = require('../middleware/auth');
 const {
   requireRole,
@@ -123,10 +124,21 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// POST /api/restaurants - Créer un nouveau restaurant (admin seulement)
-router.post('/', auth, requireRole(USER_ROLES.ADMIN), async (req, res) => {
+// POST /api/restaurants - Créer un nouveau restaurant (admin et owner)
+router.post('/', auth, requireRole([USER_ROLES.ADMIN, USER_ROLES.OWNER]), async (req, res) => {
   try {
+
+    //  Si OWNER, l'assigner automatiquement comme propriétaire
+    if (req.user.role === USER_ROLES.OWNER) {
+      req.body.owner = req.user._id;
+    }
+
     const restaurant = await Restaurant.create(req.body);
+
+      // Si OWNER, mettre à jour son restaurantId
+     if (req.user.role === USER_ROLES.OWNER) {
+      await User.findByIdAndUpdate(req.user._id, { restaurantId: restaurant._id });
+    }
     
     await restaurant.populate('owner', 'firstName lastName email');
     
@@ -217,7 +229,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE /api/restaurants/:id - Supprimer un restaurant (admin seulement)
-router.delete('/:id', auth, requireRole(USER_ROLES.ADMIN), async (req, res) => {
+router.delete('/:id', auth, requireRole([USER_ROLES.ADMIN, USER_ROLES.OWNER]), async (req, res) => {
   try {
     const restaurant = await Restaurant.findById(req.params.id);
     
@@ -227,10 +239,25 @@ router.delete('/:id', auth, requireRole(USER_ROLES.ADMIN), async (req, res) => {
         message: 'Restaurant non trouvé'
       });
     }
+
+    if(req.user.role === USER_ROLES_OWNER){
+      if(restaurant.owner.toString() !== req.user._id.toString()){
+        return res.status(403).json({
+          success : false,
+          message: 'Vous ne pouvez supprimer que votre propre restaurant'
+        });
+      }
+    }
     
     // Soft delete - désactiver le restaurant
     restaurant.isActive = false;
     await restaurant.save();
+
+    // Si OWNER supprime son restaurant, retirer l'assignation
+
+     if (req.user.role === USER_ROLES.OWNER) {
+      await User.findByIdAndUpdate(req.user._id, { $unset: { restaurantId: 1 } });
+    }
     
     res.json({
       success: true,

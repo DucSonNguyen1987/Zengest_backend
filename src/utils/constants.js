@@ -33,6 +33,12 @@ const PERMISSIONS = {
   READ_TABLE: 'read_table',
   UPDATE_TABLE: 'update_table',
   DELETE_TABLE: 'delete_table',
+
+   // Gestion des restaurants
+  READ_RESTAURANT: 'read_restaurant',
+  UPDATE_RESTAURANT: 'update_restaurant',
+  CREATE_RESTAURANT: 'create_restaurant',
+  DELETE_RESTAURANT: 'delete_restaurant',
   
   // Analytics et rapports
   VIEW_ANALYTICS: 'view_analytics',

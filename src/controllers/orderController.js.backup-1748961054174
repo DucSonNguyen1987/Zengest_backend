@@ -144,67 +144,6 @@ exports.getOrderById = async (req, res) => {
  */
 exports.createOrder = async (req, res) => {
   try {
-    // === CORRECTION AUTO FLOORPLAN & TABLE ===
-    let { floorPlanId, tableNumber: finalTableNumber, tableId, customer, items, priority = 'normal' } = req.body;
-    
-    // Validation basique
-    if (!customer || (!customer.name && !customer.firstName)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Informations client requises (name ou firstName/lastName)'
-      });
-    }
-    
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Au moins un élément doit être commandé'
-      });
-    }
-    
-    // Gestion automatique du floorPlanId
-    if (!floorPlanId) {
-      const FloorPlan = require('../models/FloorPlan');
-      const defaultPlan = await FloorPlan.findOne({ 
-        restaurantId: req.user.restaurantId,
-        isDefault: true 
-      });
-      
-      if (defaultPlan) {
-        floorPlanId = defaultPlan._id;
-        console.log('FloorPlan par défaut utilisé:', defaultPlan.name);
-      } else {
-        return res.status(400).json({
-          success: false,
-          message: 'Aucun plan de salle par défaut configuré'
-        });
-      }
-    }
-    
-    // Gestion tableNumber/tableId
-    const finalTableNumber = tableNumber || tableId || 'T-' + Date.now();
-    console.log('Table assignée:', finalTableNumber);
-    // === FIN CORRECTION AUTO ===
-
-    // === CORRECTION AUTO: Gestion floorPlanId ===
-    let { floorPlanId } = req.body;
-    if (!floorPlanId) {
-      const FloorPlan = require('../models/FloorPlan');
-      const defaultPlan = await FloorPlan.findOne({ 
-        restaurantId: req.user.restaurantId,
-        isDefault: true 
-      });
-      if (defaultPlan) {
-        floorPlanId = defaultPlan._id;
-      } else {
-        return res.status(400).json({
-          success: false,
-          message: 'Aucun plan par défaut disponible'
-        });
-      }
-    }
-    // === FIN CORRECTION ===
-
     // Validation des erreurs
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -217,7 +156,7 @@ exports.createOrder = async (req, res) => {
 
     const {
       items,
-      tableNumber: finalTableNumber,
+      tableNumber,
       floorPlanId,
       customer,
       assignedServer,
@@ -271,7 +210,7 @@ exports.createOrder = async (req, res) => {
     const newOrder = new Order({
       orderNumber: `CMD${Date.now()}`, // Générer un numéro unique
       items: processedItems,
-      tableNumber: finalTableNumber,
+      tableNumber,
       floorPlanId,
       customer,
       assignedServer,
@@ -461,7 +400,7 @@ exports.getOrdersByTable = async (req, res) => {
 
     const filter = {
       floorPlanId,
-      tableNumber: finalTableNumber, tableId,
+      tableNumber: tableId,
       status: { $nin: ['paid', 'cancelled'] }
     };
 
