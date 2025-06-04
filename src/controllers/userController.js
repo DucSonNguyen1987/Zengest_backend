@@ -1,19 +1,30 @@
 /**
- * CONTRÔLEUR USER - Généré automatiquement  
- * Gestion complète des utilisateurs avec pagination
+ * CONTRÔLEUR USER
  */
 
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const bcrypt = require('bcryptjs');
-const { createPagination } = require('../utils/pagination');
 
-// === MÉTHODES PRINCIPALES ===
+// Utilitaire pagination
+const createPagination = (page, limit, total) => {
+  const currentPage = parseInt(page) || 1;
+  const itemsPerPage = Math.min(parseInt(limit) || 10, 100);
+  const totalItems = parseInt(total) || 0;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-/**
- * Récupérer tous les utilisateurs
- * GET /users
- */
+  return {
+    currentPage,
+    totalPages,
+    total: totalItems,
+    limit: itemsPerPage,
+    hasNextPage: currentPage < totalPages,
+    hasPrevPage: currentPage > 1,
+    skip: (currentPage - 1) * itemsPerPage
+  };
+};
+
+// Récupérer tous les utilisateurs
 exports.getAllUsers = async (req, res) => {
   try {
     console.log('getAllUsers appelé par:', req.user?.email, 'rôle:', req.user?.role);
@@ -31,8 +42,7 @@ exports.getAllUsers = async (req, res) => {
     // Construire le filtre
     const filter = {};
     
-    // Admin peut voir tous les utilisateurs
-    // Owner/Manager ne voient que leur restaurant
+    // Admin peut voir tous, Owner/Manager limités à leur restaurant
     if (req.user.role === 'owner' || req.user.role === 'manager') {
       filter.restaurantId = req.user.restaurantId;
     }
@@ -91,10 +101,7 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
-/**
- * Récupérer un utilisateur par ID
- * GET /users/:id
- */
+// Récupérer un utilisateur par ID
 exports.getUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -141,10 +148,7 @@ exports.getUser = async (req, res) => {
   }
 };
 
-/**
- * Créer un utilisateur
- * POST /users
- */
+// Créer un utilisateur
 exports.createUser = async (req, res) => {
   try {
     console.log('createUser appelé par:', req.user?.email);
@@ -184,7 +188,7 @@ exports.createUser = async (req, res) => {
       });
     }
     
-    // Valider le rôle
+    // Valider le rôle (CORRECTION: rôles en minuscules)
     const validRoles = ['admin', 'owner', 'manager', 'staff_bar', 'staff_floor', 'staff_kitchen', 'guest'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
@@ -199,17 +203,6 @@ exports.createUser = async (req, res) => {
       finalRestaurantId = req.user.restaurantId;
     }
     
-    // Valider le restaurant si fourni
-    if (finalRestaurantId) {
-      const restaurant = await Restaurant.findById(finalRestaurantId);
-      if (!restaurant) {
-        return res.status(400).json({
-          success: false,
-          message: 'Restaurant spécifié non trouvé'
-        });
-      }
-    }
-    
     // Hasher le mot de passe
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
@@ -221,7 +214,7 @@ exports.createUser = async (req, res) => {
       password: hashedPassword,
       role,
       phone,
-      restaurantId: finalRestaurantId || null,
+      restaurantId: finalRestaurantId || null, // CORRECTION: optionnel
       isActive: true,
       timestamps: {
         createdAt: new Date(),
@@ -254,10 +247,7 @@ exports.createUser = async (req, res) => {
   }
 };
 
-/**
- * Mettre à jour un utilisateur
- * PUT /users/:id
- */
+// Mettre à jour un utilisateur
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -319,10 +309,7 @@ exports.updateUser = async (req, res) => {
   }
 };
 
-/**
- * Supprimer un utilisateur
- * DELETE /users/:id
- */
+// Supprimer un utilisateur
 exports.deleteUser = async (req, res) => {
   try {
     const { id } = req.params;

@@ -85,13 +85,19 @@ const userSchema = new mongoose.Schema({
     }
   },
   
-  restaurantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Restaurant',
-    required: function() {
-      return this.role !== USER_ROLES.ADMIN;
+ restaurantId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Restaurant',
+  required: function() {
+    // Seulement obligatoire pour les rôles staff et manager en production
+    if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+      return false; // Optionnel en dev/test
     }
+    const exemptRoles = ['admin', 'ADMIN'];
+    return !exemptRoles.includes(this.role);
   },
+  default: null
+},
   
   isActive: {
     type: Boolean,

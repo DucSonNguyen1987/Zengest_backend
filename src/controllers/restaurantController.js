@@ -1,23 +1,24 @@
 /**
- * CONTRÔLEUR RESTAURANT - Généré automatiquement
- * Gestion complète des restaurants avec toutes les méthodes nécessaires
+ * CONTRÔLEUR RESTAURANT
  */
 
 const Restaurant = require('../models/Restaurant');
 const User = require('../models/User');
-const { createPagination } = require('../utils/pagination');
 
-// === MÉTHODES PRINCIPALES ===
-
-/**
- * Récupérer tous les restaurants
- * GET /restaurants
- */
+// Récupérer tous les restaurants
 exports.getAllRestaurants = async (req, res) => {
   try {
-    console.log('getAllRestaurants appelé par:', req.user?.email);
+    console.log('getAllRestaurants appelé par:', req.user?.email, 'rôle:', req.user?.role);
     
     const { page = 1, limit = 10, search, isActive } = req.query;
+    
+    // CORRECTION: Owner ET Admin peuvent accéder
+    if (!['admin', 'owner'].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès non autorisé - Admin ou Owner requis'
+      });
+    }
     
     // Construire le filtre
     const filter = {};
@@ -31,24 +32,17 @@ exports.getAllRestaurants = async (req, res) => {
       ];
     }
     
-    // Vérification permissions
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Accès non autorisé - Admin requis'
-      });
-    }
-    
-    const pagination = createPagination(page, limit, 0);
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
     
     const restaurants = await Restaurant.find(filter)
       .populate('owner', 'firstName lastName email')
       .sort({ createdAt: -1 })
-      .limit(pagination.limit)
-      .skip(pagination.skip);
+      .limit(limitNum)
+      .skip((pageNum - 1) * limitNum);
     
     const total = await Restaurant.countDocuments(filter);
-    const finalPagination = createPagination(page, limit, total);
+    const totalPages = Math.ceil(total / limitNum);
     
     console.log('Restaurants récupérés:', { count: restaurants.length, total });
     
@@ -56,7 +50,12 @@ exports.getAllRestaurants = async (req, res) => {
       success: true,
       data: {
         restaurants,
-        pagination: finalPagination
+        pagination: {
+          currentPage: pageNum,
+          totalPages,
+          total,
+          limit: limitNum
+        }
       }
     });
     
@@ -70,10 +69,7 @@ exports.getAllRestaurants = async (req, res) => {
   }
 };
 
-/**
- * Récupérer un restaurant par ID
- * GET /restaurants/:id
- */
+// Récupérer un restaurant par ID
 exports.getRestaurant = async (req, res) => {
   try {
     const { id } = req.params;
@@ -91,9 +87,8 @@ exports.getRestaurant = async (req, res) => {
       });
     }
 
-    // Vérification permissions
-    if (req.user.role !== 'admin' && 
-        req.user.role !== 'owner' && 
+    // CORRECTION: Admin ET Owner peuvent accéder
+    if (!['admin', 'owner'].includes(req.user.role) && 
         req.user.restaurantId?.toString() !== id) {
       console.log('Accès refusé pour utilisateur:', req.user.email, 'rôle:', req.user.role);
       return res.status(403).json({
@@ -118,10 +113,7 @@ exports.getRestaurant = async (req, res) => {
   }
 };
 
-/**
- * Récupérer le statut d'un restaurant
- * GET /restaurants/:id/status
- */
+// Récupérer le statut d'un restaurant
 exports.getRestaurantStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -194,19 +186,16 @@ exports.getRestaurantStatus = async (req, res) => {
   }
 };
 
-/**
- * Créer un nouveau restaurant
- * POST /restaurants
- */
+// Créer un nouveau restaurant
 exports.createRestaurant = async (req, res) => {
   try {
     console.log('createRestaurant appelé par:', req.user?.email);
     
-    // Vérification permissions
-    if (req.user.role !== 'admin') {
+    // CORRECTION: Admin ET Owner peuvent créer
+    if (!['admin', 'owner'].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: 'Accès non autorisé - Admin requis'
+        message: 'Accès non autorisé - Admin ou Owner requis'
       });
     }
     
@@ -229,17 +218,6 @@ exports.createRestaurant = async (req, res) => {
         success: false,
         message: 'Nom, adresse et contact sont requis'
       });
-    }
-    
-    // Vérifier que le propriétaire existe
-    if (owner) {
-      const ownerUser = await User.findById(owner);
-      if (!ownerUser) {
-        return res.status(400).json({
-          success: false,
-          message: 'Propriétaire spécifié non trouvé'
-        });
-      }
     }
     
     const newRestaurant = new Restaurant({
@@ -277,10 +255,7 @@ exports.createRestaurant = async (req, res) => {
   }
 };
 
-/**
- * Mettre à jour un restaurant
- * PUT /restaurants/:id
- */
+// Mettre à jour un restaurant
 exports.updateRestaurant = async (req, res) => {
   try {
     const { id } = req.params;
@@ -295,9 +270,9 @@ exports.updateRestaurant = async (req, res) => {
       });
     }
     
-    // Vérification permissions
-    if (req.user.role !== 'admin' && 
-        (req.user.role !== 'owner' || req.user.restaurantId?.toString() !== id)) {
+    // CORRECTION: Admin ET Owner peuvent modifier
+    if (!['admin', 'owner'].includes(req.user.role) && 
+        req.user.restaurantId?.toString() !== id) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé'
@@ -332,16 +307,13 @@ exports.updateRestaurant = async (req, res) => {
   }
 };
 
-/**
- * Supprimer un restaurant
- * DELETE /restaurants/:id
- */
+// Supprimer un restaurant
 exports.deleteRestaurant = async (req, res) => {
   try {
     const { id } = req.params;
     console.log('deleteRestaurant appelé pour ID:', id, 'par:', req.user?.email);
     
-    // Vérification permissions
+    // Seuls les admins peuvent supprimer
     if (req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,

@@ -9,7 +9,17 @@ const {
 } = require('../middleware/roleCheck');
 const { USER_ROLES } = require('../utils/constants');
 
+const {
+  getAllRestaurants,     // ← Ajoutez si manquant
+  getRestaurant,         // ← Ajoutez si manquant
+  getRestaurantStatus,   // ← Ajoutez si manquant
+  createRestaurant,
+  updateRestaurant,
+  deleteRestaurant
+} = require('../controllers/restaurantController');
+
 const router = express.Router();
+
 
 // GET /api/restaurants - Obtenir tous les restaurants (admin seulement)
 router.get('/', auth, requireRole(USER_ROLES.ADMIN), async (req, res) => {
@@ -305,5 +315,6 @@ router.get('/:id/status', async (req, res) => {
     });
   }
 });
+
 
 module.exports = router;

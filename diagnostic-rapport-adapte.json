@@ -1,0 +1,79 @@
+{
+  "timestamp": "2025-06-04T09:11:22.560Z",
+  "issues": [
+    {
+      "category": "ROLES_MAJUSCULES",
+      "problem": "Rôles en majuscules détectés",
+      "details": "Des rôles en MAJUSCULES persistent dans le modèle User",
+      "severity": "HIGH"
+    },
+    {
+      "category": "RESTAURANTID_REQUIS",
+      "problem": "RestaurantId toujours obligatoire",
+      "details": "Tests échoueront car restaurantId est requis",
+      "severity": "HIGH"
+    }
+  ],
+  "fixes": [],
+  "adaptations": [
+    {
+      "category": "CONTROLEUR_RESTAURANT",
+      "status": "OK",
+      "details": "6/6 méthodes, gestion erreurs et permissions"
+    },
+    {
+      "category": "CONTROLEUR_USER",
+      "status": "OK",
+      "details": "5/5 méthodes, pagination et validation rôles"
+    },
+    {
+      "category": "COMMANDES_FLOORPLAN",
+      "status": "OK",
+      "details": "Gestion automatique floorPlanId par défaut"
+    },
+    {
+      "category": "RESERVATIONS_FORMATS",
+      "status": "OK",
+      "details": "Formats clients flexibles (name et firstName/lastName)"
+    },
+    {
+      "category": "PAGINATION_UTILITAIRE",
+      "status": "OK",
+      "details": "Utilitaire pagination complet et fonctionnel"
+    },
+    {
+      "category": "ROUTES_RESTAURANT",
+      "status": "OK",
+      "details": "6/6 routes avec authentification"
+    },
+    {
+      "category": "VERSION_APP",
+      "status": "OK",
+      "details": "Version 1.2.0 fixe partout"
+    },
+    {
+      "category": "PERMISSIONS_OWNER",
+      "status": "OK",
+      "details": "Owner reconnu avec permissions appropriées"
+    },
+    {
+      "category": "CONFIGURATION_NPM",
+      "status": "OK",
+      "details": "Version 1.2.0, tests, seeds"
+    },
+    {
+      "category": "CONFIGURATION_ENV",
+      "status": "OK",
+      "details": "Fichier .env présent"
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "critical": 0,
+    "high": 2,
+    "medium": 0,
+    "adaptationRate": 100,
+    "successfulAdaptations": 10,
+    "totalAdaptations": 10
+  }
+}
