@@ -1,43 +1,55 @@
 const mongoose = require('mongoose');
 
+// Schéma pour les réservations
 const reservationSchema = new mongoose.Schema({
-  reservationNumber: {
-    type: String,
-    unique: true,
-    sparse: true // Permet les valeurs null pendant la création
-  },
-  
+  // Restaurant concerné
   restaurantId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Restaurant',
-    required: [true, 'L\'ID du restaurant est requis']
+    required: [true, 'L\'ID du restaurant est requis'],
+    index: true
   },
   
-  // Informations du client
+  // Informations client (format flexible)
   customer: {
+    // CORRECTION: Support des deux formats
+    firstName: {
+      type: String,
+      required: function() {
+        return !this.customer?.name; // firstName requis si pas de name
+      },
+      trim: true,
+      maxlength: [50, 'Le prénom ne peut dépasser 50 caractères']
+    },
+    lastName: {
+      type: String,
+      trim: true,
+      maxlength: [50, 'Le nom ne peut dépasser 50 caractères']
+    },
+    // Format alternatif avec nom complet
     name: {
       type: String,
-      required: [true, 'Le nom du client est requis'],
+      required: function() {
+        return !this.customer?.firstName; // name requis si pas de firstName
+      },
       trim: true,
       maxlength: [100, 'Le nom ne peut dépasser 100 caractères']
     },
     email: {
       type: String,
-      required: [true, 'L\'email du client est requis'],
+      trim: true,
       lowercase: true,
-      match: [
-        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-        'Email invalide'
-      ]
+      match: [/^\S+@\S+\.\S+$/, 'Email invalide']
     },
     phone: {
       type: String,
-      required: [true, 'Le téléphone du client est requis'],
+      required: [true, 'Le numéro de téléphone est requis'],
+      trim: true,
       match: [/^[0-9+\-\s()]+$/, 'Numéro de téléphone invalide']
     },
-    specialRequests: {
+    notes: {
       type: String,
-      maxlength: [300, 'Les demandes spéciales ne peuvent dépasser 300 caractères']
+      maxlength: [200, 'Les notes client ne peuvent dépasser 200 caractères']
     }
   },
   
@@ -45,113 +57,97 @@ const reservationSchema = new mongoose.Schema({
   dateTime: {
     type: Date,
     required: [true, 'La date et heure sont requises'],
+    index: true,
     validate: {
-      validator: function(date) {
-        return date > new Date();
+      validator: function(value) {
+        return value > new Date();
       },
       message: 'La date de réservation doit être dans le futur'
     }
   },
   
-  // Durée estimée en minutes
-  duration: {
-    type: Number,
-    default: 120, // 2 heures par défaut
-    min: [30, 'Durée minimum : 30 minutes'],
-    max: [360, 'Durée maximum : 6 heures']
-  },
-  
-  // Nombre de convives
-  numberOfGuests: {
+  // Nombre de personnes
+  partySize: {
     type: Number,
     required: [true, 'Le nombre de convives est requis'],
     min: [1, 'Au moins 1 convive requis'],
-    max: [50, 'Maximum 50 convives']
+    max: [20, 'Maximum 20 convives'],
+    default: 2
   },
   
-  // Table assignée (optionnel au moment de la réservation)
-  assignedTable: {
-    floorPlanId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'FloorPlan'
-    },
-    tableId: {
-      type: mongoose.Schema.Types.ObjectId
-    },
-    tableNumber: String, // Stocké pour l'historique
-    assignedAt: Date,
-    assignedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    }
+  // Durée estimée en minutes
+  duration: {
+    type: Number,
+    min: [30, 'Durée minimum: 30 minutes'],
+    max: [480, 'Durée maximum: 8 heures'],
+    default: 120 // 2 heures par défaut
   },
   
   // Statut de la réservation
   status: {
     type: String,
-    enum: [
-      'pending',     // En attente de confirmation
-      'confirmed',   // Confirmée
-      'seated',      // Client installé
-      'completed',   // Terminée
-      'cancelled',   // Annulée
-      'no_show'      // Client absent
-    ],
-    default: 'pending'
+    enum: {
+      values: ['pending', 'confirmed', 'seated', 'completed', 'cancelled', 'no_show'],
+      message: 'Statut de réservation invalide'
+    },
+    default: 'pending',
+    index: true
   },
   
-  // Préférences
-  preferences: {
-    seatingArea: {
+  // Table assignée (optionnel)
+  tableAssigned: {
+    floorPlanId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FloorPlan'
+    },
+    tableNumber: {
       type: String,
-      enum: ['indoor', 'outdoor', 'terrace', 'private', 'bar', 'no_preference'],
-      default: 'no_preference'
-    },
-    tableType: {
-      type: String,
-      enum: ['round', 'square', 'rectangle', 'oval', 'no_preference'],
-      default: 'no_preference'
-    },
-    accessibility: {
-      type: Boolean,
-      default: false
-    },
-    quiet: {
-      type: Boolean,
-      default: false
+      trim: true
     }
+  },
+  
+  // Demandes spéciales
+  specialRequests: [{
+    type: String,
+    maxlength: [100, 'Chaque demande ne peut dépasser 100 caractères']
+  }],
+  
+  // Source de la réservation
+  source: {
+    type: String,
+    enum: ['online', 'phone', 'walk_in', 'app', 'partner'],
+    default: 'online'
+  },
+  
+  // Staff assigné
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
   
   // Notifications
   notifications: {
     confirmationSent: {
-      type: Boolean,
-      default: false
+      type: Date
     },
     reminderSent: {
-      type: Boolean,
-      default: false
+      type: Date
     },
-    emails: [{
-      type: {
-        type: String,
-        enum: ['confirmation', 'reminder', 'cancellation', 'modification']
-      },
-      sentAt: {
-        type: Date,
-        default: Date.now
-      },
-      success: {
-        type: Boolean,
-        default: true
-      },
-      messageId: String
-    }]
+    emailStatus: {
+      type: String,
+      enum: ['pending', 'sent', 'delivered', 'failed'],
+      default: 'pending'
+    },
+    smsStatus: {
+      type: String,
+      enum: ['pending', 'sent', 'delivered', 'failed'],
+      default: 'pending'
+    }
   },
   
   // Timestamps importants
   timestamps: {
-    reserved: {
+    requested: {
       type: Date,
       default: Date.now
     },
@@ -161,28 +157,35 @@ const reservationSchema = new mongoose.Schema({
     cancelled: Date
   },
   
-  // Notes internes
-  internalNotes: {
+  // Notes générales
+  notes: {
     type: String,
-    maxlength: [500, 'Les notes internes ne peuvent dépasser 500 caractères']
+    maxlength: [500, 'Les notes ne peuvent dépasser 500 caractères']
   },
   
-  // Historique des modifications
-  history: [{
-    action: {
+  // Informations de contact préférées
+  preferences: {
+    contactMethod: {
       type: String,
-      enum: ['created', 'confirmed', 'modified', 'table_assigned', 'seated', 'completed', 'cancelled']
+      enum: ['email', 'sms', 'phone'],
+      default: 'email'
     },
-    timestamp: {
-      type: Date,
-      default: Date.now
-    },
-    by: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    details: String
-  }],
+    language: {
+      type: String,
+      enum: ['fr', 'en', 'es', 'de'],
+      default: 'fr'
+    }
+  },
+  
+  // Métadonnées
+  metadata: {
+    ipAddress: String,
+    userAgent: String,
+    referrer: String,
+    utmSource: String,
+    utmMedium: String,
+    utmCampaign: String
+  },
   
   // Utilisateur qui a créé la réservation
   createdBy: {
@@ -190,7 +193,7 @@ const reservationSchema = new mongoose.Schema({
     ref: 'User'
   },
   
-  // Dernière modification
+  // Utilisateur qui a modifié en dernier
   lastModifiedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -200,68 +203,47 @@ const reservationSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  
+  // Version pour optimistic locking
+  version: {
+    type: Number,
+    default: 1
   }
 }, {
   timestamps: true
 });
 
-// Index pour améliorer les performances
-reservationSchema.index({ restaurantId: 1 });
+// Index composés pour améliorer les performances
 reservationSchema.index({ restaurantId: 1, dateTime: 1 });
 reservationSchema.index({ restaurantId: 1, status: 1 });
-reservationSchema.index({ 'customer.email': 1 });
-reservationSchema.index({ 'customer.phone': 1 });
-reservationSchema.index({ 'assignedTable.floorPlanId': 1, 'assignedTable.tableId': 1 });
-reservationSchema.index({ dateTime: 1, status: 1 });
+reservationSchema.index({ restaurantId: 1, 'customer.phone': 1 });
+reservationSchema.index({ restaurantId: 1, 'customer.email': 1 });
+reservationSchema.index({ assignedTo: 1 });
+reservationSchema.index({ 'tableAssigned.floorPlanId': 1, 'tableAssigned.tableNumber': 1 });
 
-// Middleware pour générer le numéro de réservation
-reservationSchema.pre('save', async function(next) {
-  if (this.isNew && !this.reservationNumber) {
-    try {
-      let attempts = 0;
-      const maxAttempts = 10;
-      
-      while (attempts < maxAttempts) {
-        const date = new Date(this.dateTime);
-        const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-        
-        // Compter les réservations du même jour pour ce restaurant
-        const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-        
-        const count = await this.constructor.countDocuments({
-          restaurantId: this.restaurantId,
-          dateTime: {
-            $gte: startOfDay,
-            $lt: endOfDay
-          }
-        });
-        
-        if (attempts > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
-        }
-        
-        const sequence = count + attempts + 1;
-        const reservationNumber = `RES-${dateStr}-${sequence.toString().padStart(4, '0')}`;
-        
-        const existing = await this.constructor.findOne({ reservationNumber });
-        if (!existing) {
-          this.reservationNumber = reservationNumber;
-          console.log(`🎫 Numéro de réservation généré: ${this.reservationNumber}`);
-          return next();
-        }
-        
-        attempts++;
-      }
-      
-      // Fallback en cas d'échec
-      const fallbackNumber = `RES-${Date.now().toString().slice(-8)}`;
-      this.reservationNumber = fallbackNumber;
-      
-    } catch (error) {
-      console.error('❌ Erreur génération numéro réservation:', error);
-      this.reservationNumber = `RES-EMG-${Date.now()}`;
+// Middleware pour normaliser les informations client
+reservationSchema.pre('save', function(next) {
+  // Normaliser le format du client
+  if (this.customer) {
+    // Si on a un name mais pas de firstName/lastName, les séparer
+    if (this.customer.name && !this.customer.firstName) {
+      const nameParts = this.customer.name.trim().split(' ').filter(part => part.length > 0);
+      this.customer.firstName = nameParts[0] || '';
+      this.customer.lastName = nameParts.slice(1).join(' ') || '';
     }
+    
+    // Si on a firstName/lastName mais pas de name, les combiner
+    if (this.customer.firstName && !this.customer.name) {
+      this.customer.name = `${this.customer.firstName} ${this.customer.lastName || ''}`.trim();
+    }
+    
+    // Nettoyer les espaces
+    if (this.customer.firstName) this.customer.firstName = this.customer.firstName.trim();
+    if (this.customer.lastName) this.customer.lastName = this.customer.lastName.trim();
+    if (this.customer.name) this.customer.name = this.customer.name.trim();
+    if (this.customer.email) this.customer.email = this.customer.email.trim().toLowerCase();
+    if (this.customer.phone) this.customer.phone = this.customer.phone.trim();
   }
   
   next();
@@ -286,200 +268,125 @@ reservationSchema.pre('save', function(next) {
         if (!this.timestamps.cancelled) this.timestamps.cancelled = now;
         break;
     }
+    
+    // Incrémenter la version
+    this.version += 1;
   }
   
   next();
 });
 
-// Middleware pour ajouter à l'historique
-reservationSchema.pre('save', function(next) {
-  if (this.isNew) {
-    this.history.push({
-      action: 'created',
-      by: this.createdBy,
-      details: 'Réservation créée'
-    });
-  } else if (this.isModified('status')) {
-    this.history.push({
-      action: this.status,
-      by: this.lastModifiedBy,
-      details: `Statut changé vers: ${this.status}`
-    });
-  }
-  
-  next();
+// Virtuels pour des informations calculées
+reservationSchema.virtual('customerFullName').get(function() {
+  if (this.customer.name) return this.customer.name;
+  return `${this.customer.firstName || ''} ${this.customer.lastName || ''}`.trim();
 });
 
-// Virtuel pour calculer l'heure de fin
-reservationSchema.virtual('endTime').get(function() {
-  return new Date(this.dateTime.getTime() + (this.duration * 60000));
+reservationSchema.virtual('isUpcoming').get(function() {
+  return this.dateTime > new Date() && ['pending', 'confirmed'].includes(this.status);
 });
 
-// Virtuel pour vérifier si la réservation est dans le futur
-reservationSchema.virtual('isFuture').get(function() {
-  return this.dateTime > new Date();
+reservationSchema.virtual('isPast').get(function() {
+  return this.dateTime < new Date();
 });
 
-// Virtuel pour vérifier si la réservation est aujourd'hui
-reservationSchema.virtual('isToday').get(function() {
-  const today = new Date();
-  const reservationDate = new Date(this.dateTime);
-  return today.toDateString() === reservationDate.toDateString();
+reservationSchema.virtual('durationInHours').get(function() {
+  return Math.round(this.duration / 60 * 10) / 10; // Arrondi à 1 décimale
 });
 
-// Virtuel pour obtenir le temps restant avant la réservation
-reservationSchema.virtual('timeUntilReservation').get(function() {
-  const now = new Date();
-  const diffMs = this.dateTime - now;
-  
-  if (diffMs <= 0) return null;
-  
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-  
-  return { hours, minutes, totalMinutes: Math.floor(diffMs / (1000 * 60)) };
-});
-
-// Méthode pour vérifier si la réservation peut être modifiée
+// Méthodes d'instance
 reservationSchema.methods.canBeModified = function() {
-  return ['pending', 'confirmed'].includes(this.status) && this.isFuture;
+  return ['pending', 'confirmed'].includes(this.status) && this.dateTime > new Date();
 };
 
-// Méthode pour vérifier si la réservation peut être annulée
 reservationSchema.methods.canBeCancelled = function() {
-  return ['pending', 'confirmed'].includes(this.status) && this.isFuture;
+  return !['completed', 'cancelled', 'no_show'].includes(this.status);
 };
 
-// Méthode pour assigner une table
-reservationSchema.methods.assignTable = function(floorPlanId, tableId, tableNumber, assignedBy) {
-  this.assignedTable = {
-    floorPlanId,
-    tableId,
-    tableNumber,
-    assignedAt: new Date(),
-    assignedBy
-  };
+reservationSchema.methods.isLate = function(minutesTolerance = 15) {
+  if (this.status !== 'confirmed') return false;
+  const now = new Date();
+  const expectedTime = new Date(this.dateTime.getTime() + minutesTolerance * 60 * 1000);
+  return now > expectedTime;
+};
+
+reservationSchema.methods.shouldSendReminder = function(hoursBeforeDefault = 24) {
+  if (this.status !== 'confirmed') return false;
+  if (this.notifications.reminderSent) return false;
   
-  this.history.push({
-    action: 'table_assigned',
-    by: assignedBy,
-    details: `Table ${tableNumber} assignée`
-  });
-};
-
-// Méthode pour ajouter une note d'email
-reservationSchema.methods.addEmailLog = function(type, success, messageId) {
-  this.notifications.emails.push({
-    type,
-    success,
-    messageId,
-    sentAt: new Date()
-  });
+  const now = new Date();
+  const reminderTime = new Date(this.dateTime.getTime() - hoursBeforeDefault * 60 * 60 * 1000);
   
-  if (type === 'confirmation' && success) {
-    this.notifications.confirmationSent = true;
-  } else if (type === 'reminder' && success) {
-    this.notifications.reminderSent = true;
-  }
+  return now >= reminderTime;
 };
 
-// Méthode pour obtenir les informations publiques
 reservationSchema.methods.toPublicJSON = function() {
   const reservation = this.toObject({ virtuals: true });
   
   // Supprimer les champs sensibles
-  delete reservation.internalNotes;
-  delete reservation.history;
-  delete reservation.notifications.emails;
-  delete reservation.lastModifiedBy;
-  delete reservation.createdBy;
   delete reservation.__v;
+  delete reservation.metadata.ipAddress;
+  delete reservation.metadata.userAgent;
   
   return reservation;
 };
 
-// Méthode statique pour trouver les conflits de réservation
-reservationSchema.statics.findConflicts = function(restaurantId, dateTime, duration, excludeId = null) {
-  const startTime = new Date(dateTime);
-  const endTime = new Date(startTime.getTime() + (duration * 60000));
+// Méthodes statiques
+reservationSchema.statics.findByCustomer = function(customerInfo, restaurantId) {
+  const filter = { restaurantId, isActive: true };
   
-  const filter = {
-    restaurantId,
-    status: { $in: ['confirmed', 'seated'] },
-    isActive: true,
-    $or: [
-      // Nouvelle réservation commence pendant une réservation existante
-      {
-        dateTime: { $lte: startTime },
-        $expr: {
-          $gte: [
-            { $add: ['$dateTime', { $multiply: ['$duration', 60000] }] },
-            startTime
-          ]
-        }
-      },
-      // Nouvelle réservation se termine pendant une réservation existante
-      {
-        dateTime: { $gte: startTime, $lt: endTime }
-      }
-    ]
-  };
-  
-  if (excludeId) {
-    filter._id = { $ne: excludeId };
+  if (customerInfo.email) {
+    filter['customer.email'] = customerInfo.email.toLowerCase();
+  } else if (customerInfo.phone) {
+    filter['customer.phone'] = customerInfo.phone;
   }
   
-  return this.find(filter);
+  return this.find(filter).sort({ dateTime: -1 });
 };
 
-// Méthode statique pour obtenir les réservations du jour
-reservationSchema.statics.findByDate = function(restaurantId, date, status = null) {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-  
-  const filter = {
+reservationSchema.statics.findByDateRange = function(restaurantId, startDate, endDate) {
+  return this.find({
     restaurantId,
     dateTime: {
-      $gte: startOfDay,
-      $lte: endOfDay
+      $gte: startDate,
+      $lte: endDate
     },
     isActive: true
-  };
-  
-  if (status) {
-    filter.status = status;
-  }
-  
-  return this.find(filter)
-    .populate('assignedTable.floorPlanId', 'name')
-    .populate('createdBy', 'firstName lastName')
-    .sort({ dateTime: 1 });
+  }).sort({ dateTime: 1 });
 };
 
-// Méthode statique pour les réservations nécessitant un rappel
-reservationSchema.statics.findNeedingReminder = function() {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(0, 0, 0, 0);
-  
-  const endOfTomorrow = new Date(tomorrow);
-  endOfTomorrow.setHours(23, 59, 59, 999);
+reservationSchema.statics.findUpcoming = function(restaurantId, hours = 24) {
+  const now = new Date();
+  const endTime = new Date(now.getTime() + hours * 60 * 60 * 1000);
   
   return this.find({
+    restaurantId,
     dateTime: {
-      $gte: tomorrow,
-      $lte: endOfTomorrow
+      $gte: now,
+      $lte: endTime
     },
-    status: 'confirmed',
-    'notifications.reminderSent': false,
+    status: { $in: ['pending', 'confirmed'] },
     isActive: true
-  }).populate('restaurantId', 'name email');
+  }).sort({ dateTime: 1 });
 };
 
-// S'assurer que les virtuels sont inclus dans la conversion JSON
+reservationSchema.statics.findNeedingReminder = function(restaurantId, hoursBeforeDefault = 24) {
+  const now = new Date();
+  const reminderTime = new Date(now.getTime() + hoursBeforeDefault * 60 * 60 * 1000);
+  
+  return this.find({
+    restaurantId,
+    status: 'confirmed',
+    dateTime: {
+      $gte: now,
+      $lte: reminderTime
+    },
+    'notifications.reminderSent': { $exists: false },
+    isActive: true
+  });
+};
+
+// Configuration JSON
 reservationSchema.set('toJSON', { virtuals: true });
 reservationSchema.set('toObject', { virtuals: true });
 

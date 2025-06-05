@@ -1,5 +1,5 @@
 /**
- * CONTRÔLEUR USER
+ * CONTRÔLEUR USER - CORRIGÉ
  */
 
 const User = require('../models/User');
@@ -83,6 +83,7 @@ exports.getAllUsers = async (req, res) => {
       filter
     });
     
+    // ✅ CORRECTION : Utiliser finalPagination au lieu de la structure buggée
     res.json({
       success: true,
       data: {

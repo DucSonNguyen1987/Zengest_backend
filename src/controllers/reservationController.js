@@ -1,13 +1,20 @@
+/**
+ * CONTRÔLEUR RÉSERVATIONS
+ * Gestion complète des réservations avec formats clients flexibles
+ */
+
 const Reservation = require('../models/Reservation');
 const Restaurant = require('../models/Restaurant');
 const FloorPlan = require('../models/FloorPlan');
 const { createPagination } = require('../utils/pagination');
 
-// Import conditionnel des utilitaires et config
-let USER_ROLES, sendReservationConfirmation, sendReservationCancellation;
+// Import sécurisé des utilitaires
+let USER_ROLES;
 try {
   const constants = require('../utils/constants');
-  USER_ROLES = constants.USER_ROLES || {
+  USER_ROLES = constants.USER_ROLES;
+} catch {
+  USER_ROLES = {
     ADMIN: 'admin',
     OWNER: 'owner', 
     MANAGER: 'manager',
@@ -15,25 +22,18 @@ try {
     STAFF_BAR: 'staff_bar',
     STAFF_KITCHEN: 'staff_kitchen'
   };
-} catch {
-  USER_ROLES = {
-    ADMIN: 'admin',
-    OWNER: 'owner',
-    MANAGER: 'manager', 
-    STAFF_FLOOR: 'staff_floor',
-    STAFF_BAR: 'staff_bar',
-    STAFF_KITCHEN: 'staff_kitchen'
-  };
 }
 
+// Import sécurisé des services email
+let emailService;
 try {
-  const emailConfig = require('../config/email');
-  sendReservationConfirmation = emailConfig.sendReservationConfirmation;
-  sendReservationCancellation = emailConfig.sendReservationCancellation;
+  emailService = require('../services/emailService');
 } catch {
-  // Fonctions fallback si le module email n'existe pas
-  sendReservationConfirmation = async () => ({ success: false, message: 'Email non configuré' });
-  sendReservationCancellation = async () => ({ success: false, message: 'Email non configuré' });
+  // Service email fallback
+  emailService = {
+    sendReservationConfirmation: async () => ({ success: false, message: 'Email non configuré' }),
+    sendReservationCancellation: async () => ({ success: false, message: 'Email non configuré' })
+  };
 }
 
 /**
@@ -42,7 +42,6 @@ try {
  */
 exports.getAllReservations = async (req, res) => {
   try {
-    // === CORRECTION: Valeurs par défaut ===
     const {
       page = 1,
       limit = 10,
@@ -52,18 +51,13 @@ exports.getAllReservations = async (req, res) => {
       dateTo,
       customerName,
       customerEmail,
-      customerPhone,
-      tableNumber,
-      numberOfGuests,
-      seatingArea,
       sortBy = 'dateTime',
-      sortOrder = 'asc',
-      restaurantId
+      sortOrder = 'asc'
     } = req.query;
 
-    console.log('getAllReservations appelé par:', req.user?.email, 'params:', { page, limit, status });
+    console.log('getAllReservations appelé par:', req.user?.email);
 
-    // Conversion des paramètres avec validation
+    // Validation et conversion des paramètres
     const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
 
@@ -73,15 +67,11 @@ exports.getAllReservations = async (req, res) => {
     // Filtrer par restaurant selon le rôle
     if (req.user.role !== USER_ROLES.ADMIN) {
       filter.restaurantId = req.user.restaurantId;
-    } else if (restaurantId) {
-      filter.restaurantId = restaurantId;
     }
 
-    // Filtres spécifiques
+    // Filtres optionnels
     if (status) filter.status = status;
-    if (numberOfGuests) filter.numberOfGuests = parseInt(numberOfGuests);
-    if (seatingArea) filter['preferences.seatingArea'] = seatingArea;
-
+    
     // Filtres de date
     if (date) {
       const startOfDay = new Date(date);
@@ -95,49 +85,43 @@ exports.getAllReservations = async (req, res) => {
       if (dateTo) filter.dateTime.$lte = new Date(dateTo);
     }
 
-    // Filtres client avec recherche flexible
+    // Filtres client flexibles
     if (customerName) {
       filter.$or = [
         { 'customer.firstName': new RegExp(customerName, 'i') },
-        { 'customer.lastName': new RegExp(customerName, 'i') },
-        { 'customer.name': new RegExp(customerName, 'i') }
+        { 'customer.lastName': new RegExp(customerName, 'i') }
       ];
     }
     if (customerEmail) {
       filter['customer.email'] = new RegExp(customerEmail, 'i');
     }
-    if (customerPhone) {
-      filter['customer.phone'] = new RegExp(customerPhone, 'i');
-    }
 
-    // === CORRECTION: Simplification requête ===
+    // Options de tri
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
+    // Requête avec pagination
     const reservations = await Reservation.find(filter)
-      .populate('restaurantId', 'name')
-      .populate('assignedTable.floorPlanId', 'name')
-      .populate('createdBy', 'firstName lastName')
+      .populate('restaurantId', 'name address.city')
+      .populate('assignedTo', 'firstName lastName')
+      .sort(sortOptions)
       .limit(limitNum)
-      .skip((pageNum - 1) * limitNum)
-      .sort(sortOptions);
+      .skip((pageNum - 1) * limitNum);
 
     const total = await Reservation.countDocuments(filter);
     const pagination = createPagination(pageNum, limitNum, total);
 
-    // Ajouter les informations de table pour chaque réservation
-    const reservationsWithTableInfo = await Promise.all(
+    // Enrichir avec les informations de table
+    const enrichedReservations = await Promise.all(
       reservations.map(async (reservation) => {
-        // === CORRECTION: Gestion sécurisée toPublicJSON ===
-        const resObj = reservation.toPublicJSON ? 
-          reservation.toPublicJSON() : 
-          reservation.toObject();
-
-        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableId) {
+        const resObj = reservation.toObject();
+        
+        // Ajouter informations de table si assignée
+        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableNumber) {
           try {
             const floorPlan = await FloorPlan.findById(reservation.assignedTable.floorPlanId);
             if (floorPlan) {
-              const table = floorPlan.tables.id(reservation.assignedTable.tableId);
+              const table = floorPlan.tables.find(t => t.number === reservation.assignedTable.tableNumber);
               if (table) {
                 resObj.tableInfo = {
                   number: table.number,
@@ -161,23 +145,24 @@ exports.getAllReservations = async (req, res) => {
     res.json({
       success: true,
       data: {
-        reservations: reservationsWithTableInfo,
-        pagination
+        reservations: enrichedReservations,
+        pagination,
+        filters: { status, date, customerName }
       }
     });
 
   } catch (error) {
-    console.error('Erreur lors de la récupération des réservations:', error);
+    console.error('Erreur getAllReservations:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur lors de la récupération des réservations',
+      message: 'Erreur lors de la récupération des réservations',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 /**
- * Obtenir une réservation spécifique
+ * Obtenir une réservation par ID
  * GET /reservations/:id
  */
 exports.getReservationById = async (req, res) => {
@@ -186,9 +171,8 @@ exports.getReservationById = async (req, res) => {
     console.log('getReservationById appelé pour ID:', id);
 
     const reservation = await Reservation.findById(id)
-      .populate('restaurantId', 'name address')
-      .populate('assignedTable.floorPlanId', 'name')
-      .populate('createdBy', 'firstName lastName')
+      .populate('restaurantId', 'name address contact')
+      .populate('assignedTo', 'firstName lastName')
       .populate('lastModifiedBy', 'firstName lastName');
 
     if (!reservation) {
@@ -198,25 +182,23 @@ exports.getReservationById = async (req, res) => {
       });
     }
 
-    // Vérifier les permissions d'accès
+    // Vérifier les permissions
     if (req.user.role !== USER_ROLES.ADMIN &&
-      req.user.restaurantId?.toString() !== reservation.restaurantId._id.toString()) {
+        req.user.restaurantId?.toString() !== reservation.restaurantId._id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à cette réservation'
       });
     }
 
-    // === CORRECTION: Gestion sécurisée toPublicJSON ===
-    const reservationData = reservation.toPublicJSON ? 
-      reservation.toPublicJSON() : 
-      reservation.toObject();
+    const reservationData = reservation.toObject();
 
-    if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableId) {
+    // Enrichir avec les informations de table
+    if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableNumber) {
       try {
         const floorPlan = await FloorPlan.findById(reservation.assignedTable.floorPlanId);
         if (floorPlan) {
-          const table = floorPlan.tables.id(reservation.assignedTable.tableId);
+          const table = floorPlan.tables.find(t => t.number === reservation.assignedTable.tableNumber);
           if (table) {
             reservationData.tableInfo = {
               number: table.number,
@@ -237,10 +219,10 @@ exports.getReservationById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur lors de la récupération de la réservation:', error);
+    console.error('Erreur getReservationById:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur'
+      message: 'Erreur lors de la récupération de la réservation'
     });
   }
 };
@@ -251,178 +233,157 @@ exports.getReservationById = async (req, res) => {
  */
 exports.createReservation = async (req, res) => {
   try {
-    // === CORRECTION AUTO CUSTOMER & VALIDATION ===
-    let { customer, dateTime, duration = 120, numberOfGuests, preferences, internalNotes } = req.body;
-    
-    console.log('createReservation appelé par:', req.user?.email, 'données:', { 
-      hasCustomer: !!customer, 
-      dateTime, 
-      numberOfGuests 
-    });
+    console.log('createReservation appelé par:', req.user?.email);
+    console.log('Données reçues:', req.body);
 
-    let normalizedCustomer = customer;
-    let finalNumberOfGuests = numberOfGuests;
+    const {
+      customer,
+      dateTime,
+      partySize = 2,
+      duration = 120,
+      specialRequests = [],
+      source = 'online',
+      notes = ''
+    } = req.body;
 
-    // Gestion alias partySize -> numberOfGuests
-    if (!numberOfGuests && req.body.partySize) {
-      finalNumberOfGuests = req.body.partySize;
-    }
-
-    // Validation et normalisation client flexible
-    if (!customer) {
+    // === CORRECTION: Validation et normalisation client flexible ===
+    if (!customer || typeof customer !== 'object') {
       return res.status(400).json({
         success: false,
-        message: 'Informations client requises'
+        message: 'Informations client requises',
+        field: 'customer'
       });
     }
 
+    let normalizedCustomer = {};
+
+    // Format 1: firstName/lastName
     if (customer.firstName && customer.lastName) {
-      // Format firstName/lastName - OK tel quel
       normalizedCustomer = {
-        firstName: customer.firstName,
-        lastName: customer.lastName,
-        email: customer.email,
-        phone: customer.phone,
-        notes: customer.notes || ''
+        firstName: String(customer.firstName).trim(),
+        lastName: String(customer.lastName).trim(),
+        email: customer.email ? String(customer.email).trim() : '',
+        phone: customer.phone ? String(customer.phone).trim() : '',
+        notes: customer.notes ? String(customer.notes).trim() : ''
       };
-    } else if (customer.name) {
-      // Format name simple - séparer en firstName/lastName
-      const nameParts = customer.name.trim().split(' ');
+    } 
+    // Format 2: name simple (à splitter)
+    else if (customer.name) {
+      const fullName = String(customer.name).trim();
+      const nameParts = fullName.split(' ').filter(part => part.trim());
       normalizedCustomer = {
-        firstName: nameParts[0] || '',
+        firstName: nameParts[0] || 'Client',
         lastName: nameParts.slice(1).join(' ') || '',
-        email: customer.email,
-        phone: customer.phone,
-        notes: customer.notes || ''
+        email: customer.email ? String(customer.email).trim() : '',
+        phone: customer.phone ? String(customer.phone).trim() : '',
+        notes: customer.notes ? String(customer.notes).trim() : ''
       };
       console.log('Nom client normalisé:', normalizedCustomer);
     } else {
       return res.status(400).json({
         success: false,
-        message: 'Nom du client requis (name ou firstName/lastName)'
+        message: 'Nom du client requis (customer.name ou customer.firstName/lastName)',
+        field: 'customer.name'
       });
     }
 
-    // Validation autres champs
+    // Validation date
     if (!dateTime) {
       return res.status(400).json({
         success: false,
-        message: 'Date et heure de réservation requises'
+        message: 'Date et heure de réservation requises',
+        field: 'dateTime'
       });
     }
 
     const reservationDate = new Date(dateTime);
-    if (isNaN(reservationDate.getTime()) || reservationDate < new Date()) {
+    if (isNaN(reservationDate.getTime())) {
       return res.status(400).json({
         success: false,
-        message: 'Date de réservation invalide ou dans le passé'
+        message: 'Format de date invalide',
+        field: 'dateTime'
       });
     }
 
-    if (!finalNumberOfGuests || finalNumberOfGuests < 1 || finalNumberOfGuests > 20) {
+    if (reservationDate < new Date()) {
       return res.status(400).json({
         success: false,
-        message: 'Nombre de convives invalide (1-20)'
+        message: 'La date de réservation ne peut pas être dans le passé',
+        field: 'dateTime'
       });
     }
 
-    console.log('Réservation validée:', { 
-      customer: normalizedCustomer.firstName + ' ' + normalizedCustomer.lastName, 
-      numberOfGuests: finalNumberOfGuests, 
-      date: reservationDate 
-    });
-    // === FIN CORRECTION AUTO ===
-
-    // Assigner le restaurant
-    const restaurantId = req.user.role === USER_ROLES.ADMIN
-      ? req.body.restaurantId || req.user.restaurantId
-      : req.user.restaurantId;
-
-    // Vérifier que le restaurant existe
-    const restaurant = await Restaurant.findById(restaurantId);
-    if (!restaurant) {
-      return res.status(404).json({
+    // Validation partySize
+    const validatedPartySize = parseInt(partySize);
+    if (isNaN(validatedPartySize) || validatedPartySize < 1 || validatedPartySize > 20) {
+      return res.status(400).json({
         success: false,
-        message: 'Restaurant non trouvé'
+        message: 'Nombre de convives invalide (entre 1 et 20)',
+        field: 'partySize'
       });
     }
 
-    // Générer un numéro de réservation unique
-    const reservationNumber = `RES-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    // Déterminer le restaurant
+    let finalRestaurantId = req.body.restaurantId || req.user.restaurantId;
+
+    // Gestion spéciale pour admin
+    if (!finalRestaurantId && req.user.role === USER_ROLES.ADMIN) {
+      const firstRestaurant = await Restaurant.findOne();
+      if (firstRestaurant) {
+        finalRestaurantId = firstRestaurant._id;
+        console.log('Admin: Restaurant auto-assigné:', firstRestaurant.name);
+      }
+    }
+
+    if (!finalRestaurantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Restaurant requis pour créer une réservation'
+      });
+    }
 
     // Créer la réservation
-    const reservationData = {
-      reservationNumber,
-      restaurantId,
+    const newReservation = new Reservation({
+      restaurantId: finalRestaurantId,
       customer: normalizedCustomer,
       dateTime: reservationDate,
+      partySize: validatedPartySize,
       duration: parseInt(duration) || 120,
-      numberOfGuests: finalNumberOfGuests,
-      preferences: preferences || {},
-      internalNotes: internalNotes || '',
       status: 'pending',
-      source: 'online',
-      createdBy: req.user._id,
-      isActive: true,
+      specialRequests: Array.isArray(specialRequests) ? specialRequests : [],
+      source: source || 'online',
+      assignedTo: req.user._id,
+      notes: notes || '',
       timestamps: {
         requested: new Date()
       }
-    };
+    });
 
-    const reservation = await Reservation.create(reservationData);
-
-    // Populer les références
-    await reservation.populate([
+    const savedReservation = await newReservation.save();
+    
+    // Populer les données pour la réponse
+    await savedReservation.populate([
       { path: 'restaurantId', select: 'name' },
-      { path: 'createdBy', select: 'firstName lastName' }
+      { path: 'assignedTo', select: 'firstName lastName' }
     ]);
 
-    // Confirmer automatiquement si l'utilisateur a les permissions
-    if ([USER_ROLES.ADMIN, USER_ROLES.OWNER, USER_ROLES.MANAGER].includes(req.user.role)) {
-      reservation.status = 'confirmed';
-      reservation.timestamps.confirmed = new Date();
-      await reservation.save();
-
-      // Envoyer l'email de confirmation
-      try {
-        const emailResult = await sendReservationConfirmation(reservation, restaurant);
-        console.log('Email confirmation envoyé:', emailResult.success);
-        
-        // Ajouter log email si la méthode existe
-        if (reservation.addEmailLog) {
-          reservation.addEmailLog('confirmation', emailResult.success, emailResult.messageId);
-          await reservation.save();
-        }
-      } catch (emailError) {
-        console.error('Erreur envoi email confirmation:', emailError);
-      }
-    }
-
-    const responseData = reservation.toPublicJSON ? 
-      reservation.toPublicJSON() : 
-      reservation.toObject();
+    console.log('Réservation créée:', {
+      id: savedReservation._id,
+      customer: `${normalizedCustomer.firstName} ${normalizedCustomer.lastName}`,
+      dateTime: reservationDate
+    });
 
     res.status(201).json({
       success: true,
       message: 'Réservation créée avec succès',
-      data: { reservation: responseData }
+      data: { reservation: savedReservation }
     });
 
   } catch (error) {
-    console.error('Erreur lors de la création de la réservation:', error);
-
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map(e => e.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Erreur de validation',
-        errors
-      });
-    }
-
+    console.error('Erreur createReservation:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur lors de la création',
+      message: 'Erreur lors de la création de la réservation',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -448,37 +409,71 @@ exports.updateReservation = async (req, res) => {
 
     // Vérifier les permissions
     if (req.user.role !== USER_ROLES.ADMIN &&
-      req.user.restaurantId?.toString() !== reservation.restaurantId.toString()) {
+        req.user.restaurantId?.toString() !== reservation.restaurantId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Permissions insuffisantes'
       });
     }
 
-    // === CORRECTION: Gestion sécurisée canBeModified ===
-    const canModify = reservation.canBeModified ? 
-      reservation.canBeModified() : 
-      !['completed', 'no_show'].includes(reservation.status);
-
-    if (!canModify) {
+    // Vérifier si la réservation peut être modifiée
+    if (['completed', 'no_show'].includes(reservation.status)) {
       return res.status(400).json({
         success: false,
         message: 'Cette réservation ne peut plus être modifiée'
       });
     }
 
-    // Appliquer les modifications
-    const allowedFields = ['customer', 'dateTime', 'duration', 'numberOfGuests', 'preferences', 'internalNotes'];
+    // Appliquer les modifications autorisées
+    const allowedFields = ['customer', 'dateTime', 'partySize', 'duration', 'specialRequests', 'notes'];
+    const updateData = {};
+
     allowedFields.forEach(field => {
       if (req.body[field] !== undefined) {
-        if (field === 'customer') {
-          Object.assign(reservation.customer, req.body[field]);
-        } else if (field === 'preferences') {
-          Object.assign(reservation.preferences, req.body[field]);
+        if (field === 'customer' && req.body[field]) {
+          // Gérer la normalisation du client pour les mises à jour aussi
+          if (req.body[field].name && !req.body[field].firstName) {
+            const nameParts = req.body[field].name.split(' ').filter(p => p.trim());
+            updateData.customer = {
+              ...reservation.customer.toObject(),
+              firstName: nameParts[0] || reservation.customer.firstName,
+              lastName: nameParts.slice(1).join(' ') || reservation.customer.lastName,
+              ...req.body[field]
+            };
+            delete updateData.customer.name; // Supprimer le champ name après normalisation
+          } else {
+            updateData.customer = { ...reservation.customer.toObject(), ...req.body[field] };
+          }
         } else {
-          reservation[field] = req.body[field];
+          updateData[field] = req.body[field];
         }
       }
+    });
+
+    // Validation des nouvelles données
+    if (updateData.dateTime) {
+      const newDate = new Date(updateData.dateTime);
+      if (isNaN(newDate.getTime()) || newDate < new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Date de réservation invalide'
+        });
+      }
+    }
+
+    if (updateData.partySize) {
+      const partySize = parseInt(updateData.partySize);
+      if (isNaN(partySize) || partySize < 1 || partySize > 20) {
+        return res.status(400).json({
+          success: false,
+          message: 'Nombre de convives invalide (entre 1 et 20)'
+        });
+      }
+    }
+
+    // Appliquer les modifications
+    Object.keys(updateData).forEach(key => {
+      reservation[key] = updateData[key];
     });
 
     reservation.lastModifiedBy = req.user._id;
@@ -488,22 +483,19 @@ exports.updateReservation = async (req, res) => {
 
     await reservation.populate([
       { path: 'restaurantId', select: 'name' },
-      { path: 'assignedTable.floorPlanId', select: 'name' },
       { path: 'lastModifiedBy', select: 'firstName lastName' }
     ]);
 
-    const responseData = reservation.toPublicJSON ? 
-      reservation.toPublicJSON() : 
-      reservation.toObject();
+    console.log('Réservation mise à jour:', reservation._id);
 
     res.json({
       success: true,
       message: 'Réservation mise à jour avec succès',
-      data: { reservation: responseData }
+      data: { reservation: reservation.toObject() }
     });
 
   } catch (error) {
-    console.error('Erreur lors de la mise à jour:', error);
+    console.error('Erreur updateReservation:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Erreur lors de la mise à jour'
@@ -518,13 +510,13 @@ exports.updateReservation = async (req, res) => {
 exports.updateReservationStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, reason, internalNotes } = req.body;
+    const { status, reason, notes } = req.body;
 
     console.log('updateReservationStatus appelé pour ID:', id, 'nouveau statut:', status);
 
-    // === CORRECTION: Récupérer la réservation ici ===
-    const reservation = await Reservation.findById(id);
-    
+    const reservation = await Reservation.findById(id)
+      .populate('restaurantId', 'name');
+
     if (!reservation) {
       return res.status(404).json({
         success: false,
@@ -534,7 +526,7 @@ exports.updateReservationStatus = async (req, res) => {
 
     // Vérifier les permissions
     if (req.user.role !== USER_ROLES.ADMIN &&
-      req.user.restaurantId?.toString() !== reservation.restaurantId.toString()) {
+        req.user.restaurantId?.toString() !== reservation.restaurantId._id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Permissions insuffisantes'
@@ -554,7 +546,7 @@ exports.updateReservationStatus = async (req, res) => {
     reservation.status = status;
     reservation.lastModifiedBy = req.user._id;
 
-    // Mettre à jour les timestamps selon le statut
+    // Mettre à jour les timestamps
     switch (status) {
       case 'confirmed':
         reservation.timestamps.confirmed = new Date();
@@ -571,22 +563,28 @@ exports.updateReservationStatus = async (req, res) => {
         break;
     }
 
-    if (internalNotes) {
-      reservation.internalNotes = internalNotes;
+    if (notes) {
+      reservation.notes = notes;
     }
 
     await reservation.save();
 
-    // Gérer les actions spécifiques selon le statut
-    await handleStatusChange(reservation, oldStatus, status, reason);
+    // Gérer les actions spécifiques au changement de statut
+    try {
+      await handleStatusChange(reservation, oldStatus, status, reason);
+    } catch (statusError) {
+      console.error('Erreur traitement changement statut:', statusError);
+      // Ne pas faire échouer la réponse pour autant
+    }
+
+    console.log('Statut réservation changé:', oldStatus, '->', status);
 
     res.json({
       success: true,
-      message: `Statut de la réservation changé vers "${status}"`,
+      message: `Statut changé vers "${status}" avec succès`,
       data: {
         reservation: {
           id: reservation._id,
-          reservationNumber: reservation.reservationNumber,
           status: reservation.status,
           timestamps: reservation.timestamps
         }
@@ -594,10 +592,10 @@ exports.updateReservationStatus = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur lors du changement de statut:', error);
+    console.error('Erreur updateReservationStatus:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur'
+      message: 'Erreur lors du changement de statut'
     });
   }
 };
@@ -609,9 +607,9 @@ exports.updateReservationStatus = async (req, res) => {
 exports.assignTable = async (req, res) => {
   try {
     const { id } = req.params;
-    const { floorPlanId, tableId, tableNumber } = req.body;
+    const { floorPlanId, tableNumber } = req.body;
 
-    console.log('assignTable appelé pour réservation:', id, 'table:', tableNumber || tableId);
+    console.log('assignTable appelé pour réservation:', id, 'table:', tableNumber);
 
     const reservation = await Reservation.findById(id);
 
@@ -624,96 +622,58 @@ exports.assignTable = async (req, res) => {
 
     // Vérifier les permissions
     if (req.user.role !== USER_ROLES.ADMIN &&
-      req.user.restaurantId?.toString() !== reservation.restaurantId.toString()) {
+        req.user.restaurantId?.toString() !== reservation.restaurantId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Permissions insuffisantes'
       });
     }
 
-    // Vérifier que le plan de salle appartient au restaurant
+    // Vérifier le plan de salle
     const floorPlan = await FloorPlan.findById(floorPlanId);
     if (!floorPlan || floorPlan.restaurantId.toString() !== reservation.restaurantId.toString()) {
       return res.status(400).json({
         success: false,
-        message: 'Plan de salle invalide'
+        message: 'Plan de salle invalide ou non autorisé'
       });
     }
 
     // Vérifier que la table existe
-    const table = floorPlan.tables.id(tableId);
+    const table = floorPlan.tables.find(t => t.number === tableNumber);
     if (!table) {
       return res.status(404).json({
         success: false,
-        message: 'Table non trouvée'
+        message: `Table ${tableNumber} non trouvée dans le plan`
       });
     }
 
-    // Vérifier la capacité de la table
-    if (reservation.numberOfGuests > table.capacity) {
+    // Vérifier la capacité
+    if (reservation.partySize > table.capacity) {
       return res.status(400).json({
         success: false,
-        message: `La table ${table.number} ne peut accueillir que ${table.capacity} convives (${reservation.numberOfGuests} demandés)`
-      });
-    }
-
-    // Vérifier les conflits avec d'autres réservations sur cette table
-    const conflictingReservation = await Reservation.findOne({
-      'assignedTable.floorPlanId': floorPlanId,
-      'assignedTable.tableId': tableId,
-      status: { $in: ['confirmed', 'seated'] },
-      isActive: true,
-      $or: [
-        {
-          dateTime: { $lte: reservation.dateTime },
-          $expr: {
-            $gte: [
-              { $add: ['$dateTime', { $multiply: ['$duration', 60000] }] },
-              reservation.dateTime
-            ]
-          }
-        },
-        {
-          dateTime: {
-            $gte: reservation.dateTime,
-            $lt: new Date(reservation.dateTime.getTime() + (reservation.duration * 60000))
-          }
-        }
-      ],
-      _id: { $ne: reservation._id }
-    });
-
-    if (conflictingReservation) {
-      return res.status(409).json({
-        success: false,
-        message: `Table ${table.number} déjà réservée à cette heure`,
-        conflict: {
-          reservationNumber: conflictingReservation.reservationNumber,
-          customerName: conflictingReservation.customer.firstName + ' ' + conflictingReservation.customer.lastName,
-          dateTime: conflictingReservation.dateTime
-        }
+        message: `La table ${tableNumber} ne peut accueillir que ${table.capacity} convives (${reservation.partySize} demandés)`
       });
     }
 
     // Assigner la table
     reservation.assignedTable = {
       floorPlanId,
-      tableId,
-      tableNumber: table.number,
+      tableNumber,
       assignedAt: new Date(),
       assignedBy: req.user._id
     };
-    
+
     reservation.lastModifiedBy = req.user._id;
     await reservation.save();
 
+    console.log('Table assignée:', tableNumber, 'à réservation:', reservation._id);
+
     res.json({
       success: true,
-      message: `Table ${table.number} assignée à la réservation`,
+      message: `Table ${tableNumber} assignée avec succès`,
       data: {
         reservation: {
           id: reservation._id,
-          reservationNumber: reservation.reservationNumber,
           assignedTable: reservation.assignedTable
         },
         tableInfo: {
@@ -725,16 +685,16 @@ exports.assignTable = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur lors de l\'assignation de table:', error);
+    console.error('Erreur assignTable:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur'
+      message: 'Erreur lors de l\'assignation de la table'
     });
   }
 };
 
 /**
- * Obtenir les réservations d'une date spécifique
+ * Obtenir les réservations par date
  * GET /reservations/date/:date
  */
 exports.getReservationsByDate = async (req, res) => {
@@ -744,10 +704,19 @@ exports.getReservationsByDate = async (req, res) => {
 
     console.log('getReservationsByDate appelé pour date:', date);
 
+    // Déterminer le restaurant selon le rôle
     const restaurantId = req.user.role === USER_ROLES.ADMIN
       ? req.query.restaurantId || req.user.restaurantId
       : req.user.restaurantId;
 
+    if (!restaurantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Restaurant requis'
+      });
+    }
+
+    // Créer la plage de dates
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
@@ -765,22 +734,19 @@ exports.getReservationsByDate = async (req, res) => {
 
     const reservations = await Reservation.find(filter)
       .populate('restaurantId', 'name')
-      .populate('assignedTable.floorPlanId', 'name')
-      .populate('createdBy', 'firstName lastName')
+      .populate('assignedTo', 'firstName lastName')
       .sort({ dateTime: 1 });
 
-    // Ajouter les informations de table
-    const reservationsWithTableInfo = await Promise.all(
+    // Enrichir avec les informations de table
+    const enrichedReservations = await Promise.all(
       reservations.map(async (reservation) => {
-        const resObj = reservation.toPublicJSON ? 
-          reservation.toPublicJSON() : 
-          reservation.toObject();
+        const resObj = reservation.toObject();
 
-        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableId) {
+        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableNumber) {
           try {
             const floorPlan = await FloorPlan.findById(reservation.assignedTable.floorPlanId);
             if (floorPlan) {
-              const table = floorPlan.tables.id(reservation.assignedTable.tableId);
+              const table = floorPlan.tables.find(t => t.number === reservation.assignedTable.tableNumber);
               if (table) {
                 resObj.tableInfo = {
                   number: table.number,
@@ -798,20 +764,25 @@ exports.getReservationsByDate = async (req, res) => {
       })
     );
 
+    console.log('Réservations par date récupérées:', { date, count: enrichedReservations.length });
+
     res.json({
       success: true,
       data: {
         date,
-        reservations: reservationsWithTableInfo,
-        count: reservationsWithTableInfo.length
+        reservations: enrichedReservations,
+        count: enrichedReservations.length,
+        summary: {
+          byStatus: await getReservationsSummaryByStatus(filter)
+        }
       }
     });
 
   } catch (error) {
-    console.error('Erreur lors de la récupération des réservations par date:', error);
+    console.error('Erreur getReservationsByDate:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur'
+      message: 'Erreur lors de la récupération des réservations par date'
     });
   }
 };
@@ -836,7 +807,7 @@ exports.deleteReservation = async (req, res) => {
 
     // Vérifier les permissions
     if (req.user.role !== USER_ROLES.ADMIN &&
-      req.user.restaurantId?.toString() !== reservation.restaurantId.toString()) {
+        req.user.restaurantId?.toString() !== reservation.restaurantId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Permissions insuffisantes'
@@ -853,11 +824,14 @@ exports.deleteReservation = async (req, res) => {
 
     // Soft delete
     reservation.isActive = false;
+    reservation.status = 'cancelled';
     reservation.lastModifiedBy = req.user._id;
     reservation.timestamps.deleted = new Date();
+    reservation.timestamps.cancelled = new Date();
+    
     await reservation.save();
 
-    console.log('Réservation supprimée:', reservation.reservationNumber);
+    console.log('Réservation supprimée (soft delete):', reservation._id);
 
     res.json({
       success: true,
@@ -865,113 +839,134 @@ exports.deleteReservation = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur lors de la suppression:', error);
+    console.error('Erreur deleteReservation:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur'
+      message: 'Erreur lors de la suppression de la réservation'
     });
   }
 };
 
+// === FONCTIONS UTILITAIRES ===
+
 /**
- * Gère les actions spécifiques selon le changement de statut
+ * Gère les actions selon le changement de statut
  */
 const handleStatusChange = async (reservation, oldStatus, newStatus, reason) => {
   try {
     console.log('handleStatusChange:', oldStatus, '->', newStatus);
-    
-    const restaurant = await Restaurant.findById(reservation.restaurantId);
 
     switch (newStatus) {
       case 'confirmed':
         // Envoyer email de confirmation
         try {
-          const emailResult = await sendReservationConfirmation(reservation, restaurant);
-          console.log('Email confirmation envoyé:', emailResult.success);
-          
-          if (reservation.addEmailLog) {
-            reservation.addEmailLog('confirmation', emailResult.success, emailResult.messageId);
-            await reservation.save();
+          if (emailService.sendReservationConfirmation) {
+            const emailResult = await emailService.sendReservationConfirmation(reservation);
+            console.log('Email confirmation:', emailResult.success ? 'envoyé' : 'échec');
           }
         } catch (emailError) {
-          console.error('Erreur envoi email confirmation:', emailError);
+          console.warn('Erreur email confirmation:', emailError.message);
         }
         break;
 
       case 'seated':
-        // Mettre à jour le statut de la table si assignée
-        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableId) {
+        // Mettre à jour le statut de la table
+        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableNumber) {
           try {
-            const floorPlan = await FloorPlan.findById(reservation.assignedTable.floorPlanId);
-            if (floorPlan) {
-              const table = floorPlan.tables.id(reservation.assignedTable.tableId);
-              if (table) {
-                table.status = 'occupied';
-                await floorPlan.save();
-                console.log('Table marquée comme occupée:', table.number);
-              }
-            }
+            await updateTableStatus(reservation.assignedTable.floorPlanId, reservation.assignedTable.tableNumber, 'occupied');
           } catch (tableError) {
-            console.error('Erreur mise à jour statut table (seated):', tableError);
+            console.warn('Erreur mise à jour table (seated):', tableError.message);
           }
         }
         break;
 
       case 'completed':
         // Libérer la table
-        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableId) {
+        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableNumber) {
           try {
-            const floorPlan = await FloorPlan.findById(reservation.assignedTable.floorPlanId);
-            if (floorPlan) {
-              const table = floorPlan.tables.id(reservation.assignedTable.tableId);
-              if (table) {
-                table.status = 'cleaning';
-                await floorPlan.save();
-                console.log('Table marquée pour nettoyage:', table.number);
-              }
-            }
+            await updateTableStatus(reservation.assignedTable.floorPlanId, reservation.assignedTable.tableNumber, 'cleaning');
           } catch (tableError) {
-            console.error('Erreur libération table (completed):', tableError);
+            console.warn('Erreur libération table (completed):', tableError.message);
           }
         }
         break;
 
       case 'cancelled':
       case 'no_show':
-        // Envoyer email d'annulation
+        // Envoyer email d'annulation et libérer la table
         try {
-          const emailResult = await sendReservationCancellation(reservation, restaurant, reason);
-          console.log('Email annulation envoyé:', emailResult.success);
-          
-          if (reservation.addEmailLog) {
-            reservation.addEmailLog('cancellation', emailResult.success, emailResult.messageId);
-            await reservation.save();
+          if (emailService.sendReservationCancellation) {
+            const emailResult = await emailService.sendReservationCancellation(reservation, reason);
+            console.log('Email annulation:', emailResult.success ? 'envoyé' : 'échec');
           }
         } catch (emailError) {
-          console.error('Erreur envoi email annulation:', emailError);
+          console.warn('Erreur email annulation:', emailError.message);
         }
 
-        // Libérer la table si assignée
-        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableId) {
+        if (reservation.assignedTable?.floorPlanId && reservation.assignedTable?.tableNumber) {
           try {
-            const floorPlan = await FloorPlan.findById(reservation.assignedTable.floorPlanId);
-            if (floorPlan) {
-              const table = floorPlan.tables.id(reservation.assignedTable.tableId);
-              if (table && table.status === 'reserved') {
-                table.status = 'available';
-                await floorPlan.save();
-                console.log('Table libérée:', table.number);
-              }
-            }
+            await updateTableStatus(reservation.assignedTable.floorPlanId, reservation.assignedTable.tableNumber, 'available');
           } catch (tableError) {
-            console.error('Erreur libération table (cancelled):', tableError);
+            console.warn('Erreur libération table (cancelled):', tableError.message);
           }
         }
         break;
     }
   } catch (error) {
-    console.error('Erreur lors du traitement du changement de statut:', error);
+    console.error('Erreur handleStatusChange:', error);
   }
 };
 
-module.exports = exports;
+/**
+ * Met à jour le statut d'une table
+ */
+const updateTableStatus = async (floorPlanId, tableNumber, status) => {
+  try {
+    const floorPlan = await FloorPlan.findById(floorPlanId);
+    if (floorPlan) {
+      const table = floorPlan.tables.find(t => t.number === tableNumber);
+      if (table) {
+        table.status = status;
+        await floorPlan.save();
+        console.log(`Table ${tableNumber} statut changé vers: ${status}`);
+      }
+    }
+  } catch (error) {
+    console.error('Erreur updateTableStatus:', error);
+  }
+};
+
+/**
+ * Obtient un résumé des réservations par statut
+ */
+const getReservationsSummaryByStatus = async (baseFilter) => {
+  try {
+    const pipeline = [
+      { $match: baseFilter },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ];
+    
+    const results = await Reservation.aggregate(pipeline);
+    
+    const summary = {};
+    results.forEach(result => {
+      summary[result._id] = result.count;
+    });
+    
+    return summary;
+  } catch (error) {
+    console.error('Erreur getReservationsSummaryByStatus:', error);
+    return {};
+  }
+};
+
+module.exports = {
+  getAllReservations: exports.getAllReservations,
+  getReservationById: exports.getReservationById,
+  createReservation: exports.createReservation,
+  updateReservation: exports.updateReservation,
+  updateReservationStatus: exports.updateReservationStatus,
+  assignTable: exports.assignTable,
+  getReservationsByDate: exports.getReservationsByDate,
+  deleteReservation: exports.deleteReservation
+};

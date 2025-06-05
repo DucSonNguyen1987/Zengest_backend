@@ -435,6 +435,7 @@ app.get('/', (req, res) => {
   });
 });
 
+
 // Route pour servir les fichiers statiques (uploads, etc.)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   maxAge: '7d',
@@ -447,6 +448,22 @@ app.use('/public', express.static(path.join(__dirname, 'public'), {
   maxAge: '30d',
   etag: true
 }));
+
+// Route API racine (pour compatibilité tests)
+app.get('/api/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API Zengest v1.2.0 - Endpoint racine',
+    version: '1.2.0',
+    status: 'operational',
+    baseUrl: `${req.protocol}://${req.get('host')}/api`,
+    documentation: '/api/docs',
+    health: '/api/health',
+    timestamp: new Date().toISOString()
+  });
+});
+
+
 
 // Middleware pour gérer les routes non trouvées
 app.use('*', (req, res) => {

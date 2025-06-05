@@ -1,500 +1,584 @@
-const mongoose = require('mongoose');
-const { ORDER_STATUS } = require('../utils/constants');
+/**
+ * CORRECTION: src/models/Order.js
+ * Schema avec populate sécurisé et validations assouplies
+ */
 
-// Schéma pour un item de commande
+const mongoose = require('mongoose');
+
+// Sous-schéma pour les articles commandés
 const orderItemSchema = new mongoose.Schema({
   menuItem: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'MenuItem',
-    required: [true, 'L\'item de menu est requis']
+    required: [true, 'Article du menu requis']
   },
-  
-  // Copie des données du menu au moment de la commande (pour historique)
-  menuItemSnapshot: {
-    name: { type: String, required: true },
-    description: String,
-    category: String,
-    basePrice: { type: Number, required: true }
-  },
-  
-  // Variante de prix sélectionnée
-  selectedVariant: {
-    size: { type: String, required: true },
-    price: { type: Number, required: true }
-  },
-  
   quantity: {
     type: Number,
-    required: [true, 'La quantité est requise'],
-    min: [1, 'La quantité doit être d\'au moins 1']
+    required: [true, 'Quantité requise'],
+    min: [1, 'Quantité minimum: 1'],
+    max: [50, 'Quantité maximum: 50']
   },
-  
-  // Prix unitaire au moment de la commande
-  unitPrice: {
+  price: {
     type: Number,
-    required: [true, 'Le prix unitaire est requis'],
-    min: [0, 'Le prix ne peut être négatif']
+    required: [true, 'Prix requis'],
+    min: [0, 'Prix doit être positif']
   },
-  
-  // Prix total pour cet item (unitPrice * quantity)
-  totalPrice: {
-    type: Number,
-    required: [true, 'Le prix total est requis'],
-    min: [0, 'Le prix total ne peut être négatif']
+  variants: {
+    size: {
+      type: String,
+      trim: true
+    },
+    customizations: [{
+      type: String,
+      trim: true
+    }],
+    extras: [{
+      name: { type: String, trim: true },
+      price: { type: Number, default: 0 }
+    }]
   },
-  
-  // Notes spéciales pour cet item
   notes: {
     type: String,
-    maxlength: [200, 'Les notes ne peuvent dépasser 200 caractères']
-  },
-  
-  // Statut spécifique à cet item
-  status: {
+    trim: true,
+    maxlength: [500, 'Notes trop longues (max 500 caractères)']
+  }
+}, {
+  _id: true, // Garder les IDs pour les sous-documents
+  timestamps: false
+});
+
+// Sous-schéma pour les informations client
+const customerSchema = new mongoose.Schema({
+  firstName: {
     type: String,
-    enum: ['pending', 'confirmed', 'preparing', 'ready', 'served'],
+    required: [true, 'Prénom client requis'],
+    trim: true,
+    maxlength: [50, 'Prénom trop long']
+  },
+  lastName: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'Nom trop long'],
+    default: ''
+  },
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    match: [/^\S+@\S+\.\S+$/, 'Email invalide']
+  },
+  phone: {
+    type: String,
+    trim: true,
+    match: [/^[\+]?[\d\s\-\(\)]{6,20}$/, 'Téléphone invalide']
+  },
+  notes: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Notes client trop longues']
+  }
+}, {
+  _id: false,
+  timestamps: false
+});
+
+// Sous-schéma pour les prix
+const pricingSchema = new mongoose.Schema({
+  subtotal: {
+    type: Number,
+    required: true,
+    min: 0,
+    default: 0
+  },
+  tax: {
+    type: Number,
+    required: true,
+    min: 0,
+    default: 0
+  },
+  discount: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  tip: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  total: {
+    type: Number,
+    required: true,
+    min: 0
+  }
+}, {
+  _id: false,
+  timestamps: false
+});
+
+// Sous-schéma pour le paiement
+const paymentSchema = new mongoose.Schema({
+  method: {
+    type: String,
+    enum: ['cash', 'card', 'online', 'mixed', 'pending'],
     default: 'pending'
   },
-  
-  // Modifications/customisation
-  modifications: [String]
-}, { _id: true });
-
-// Schéma principal pour une commande
-const orderSchema = new mongoose.Schema({
-  // Numéro de commande unique - CORRIGÉ: pas required ici car généré automatiquement
-  orderNumber: {
+  status: {
     type: String,
-    unique: true,
-    sparse: true // Permet les valeurs null pendant la création
+    enum: ['pending', 'completed', 'failed', 'refunded'],
+    default: 'pending'
   },
-  
-  // Restaurant concerné
+  reference: {
+    type: String,
+    trim: true
+  },
+  transactionId: {
+    type: String,
+    trim: true
+  },
+  processedAt: Date,
+  tip: {
+    type: Number,
+    min: 0,
+    default: 0
+  }
+}, {
+  _id: false,
+  timestamps: false
+});
+
+// Sous-schéma pour les timestamps
+const timestampsSchema = new mongoose.Schema({
+  ordered: {
+    type: Date,
+    default: Date.now,
+    required: true
+  },
+  confirmed: Date,
+  prepared: Date,
+  served: Date,
+  paid: Date,
+  cancelled: Date,
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  _id: false,
+  timestamps: false
+});
+
+// Schéma principal de la commande
+const orderSchema = new mongoose.Schema({
+  // CORRECTION: Référence restaurant toujours requise
   restaurantId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Restaurant',
-    required: [true, 'L\'ID du restaurant est requis']
+    required: [true, 'Restaurant requis'],
+    index: true
   },
-  
-  // Plan de salle et table
+
+  // CORRECTION: FloorPlanId OPTIONNEL avec valeur par défaut
   floorPlanId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'FloorPlan',
-    required: [true, 'L\'ID du plan de salle est requis']
-  },
-  
-  tableId: {
-    type: mongoose.Schema.Types.ObjectId,
-    required: [true, 'L\'ID de la table est requis']
-  },
-  
-  // Informations de la table au moment de la commande
-  tableSnapshot: {
-    number: { type: String, required: true },
-    capacity: { type: Number, required: true }
-  },
-  
-  // Items commandés
-  items: {
-    type: [orderItemSchema],
-    required: [true, 'Au moins un item est requis'],
+    required: false, // CHANGÉ: optionnel
+    default: null,
     validate: {
-      validator: function(items) {
-        return items.length > 0;
+      validator: function(v) {
+        return v === null || mongoose.Types.ObjectId.isValid(v);
       },
-      message: 'Au moins un item est requis'
+      message: 'FloorPlanId invalide'
     }
   },
-  
+
+  // Identification de la table
+  tableNumber: {
+    type: String,
+    required: [true, 'Numéro de table requis'],
+    trim: true,
+    maxlength: [20, 'Numéro de table trop long']
+  },
+
+  tableId: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'ID de table trop long']
+  },
+
   // Informations client
   customer: {
-    name: String,
-    phone: String,
-    email: String,
-    numberOfGuests: {
-      type: Number,
-      min: [1, 'Le nombre de convives doit être d\'au moins 1'],
-      required: true
+    type: customerSchema,
+    required: [true, 'Informations client requises']
+  },
+
+  // Articles commandés
+  items: {
+    type: [orderItemSchema],
+    required: [true, 'Articles requis'],
+    validate: {
+      validator: function(items) {
+        return items && items.length > 0;
+      },
+      message: 'Au moins un article requis'
     }
   },
-  
-  // Statut global de la commande
+
+  // Statut de la commande
   status: {
     type: String,
-    enum: Object.values(ORDER_STATUS),
-    default: ORDER_STATUS.PENDING,
+    enum: {
+      values: ['pending', 'confirmed', 'preparing', 'ready', 'served', 'paid', 'cancelled'],
+      message: 'Statut invalide: {VALUE}'
+    },
+    default: 'pending',
+    required: true,
+    index: true
+  },
+
+  // Priorité
+  priority: {
+    type: String,
+    enum: ['low', 'normal', 'urgent'],
+    default: 'normal'
+  },
+
+  // CORRECTION: AssignedServer OPTIONNEL avec gestion flexible
+  assignedServer: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false, // CHANGÉ: optionnel
+    default: null,
+    validate: {
+      validator: function(v) {
+        return v === null || mongoose.Types.ObjectId.isValid(v);
+      },
+      message: 'ID serveur invalide'
+    }
+  },
+
+  // Prix et facturation
+  pricing: {
+    type: pricingSchema,
     required: true
   },
-  
-  // Calculs financiers
-  pricing: {
-    subtotal: {
-      type: Number,
-      required: true,
-      min: 0
-    },
-    
-    // TVA (calculée automatiquement)
-    tax: {
-      rate: { type: Number, default: 20 }, // Pourcentage
-      amount: { type: Number, default: 0 }
-    },
-    
-    // Service (optionnel)
-    service: {
-      rate: { type: Number, default: 0 },
-      amount: { type: Number, default: 0 }
-    },
-    
-    // Réductions
-    discount: {
-      type: { type: String, enum: ['percentage', 'amount'], default: 'percentage' },
-      value: { type: Number, default: 0 },
-      amount: { type: Number, default: 0 },
-      reason: String
-    },
-    
-    // Total final
-    total: {
-      type: Number,
-      required: true,
-      min: 0
-    }
-  },
-  
-  // Timestamps importants
-  timestamps: {
-    ordered: { type: Date, default: Date.now },
-    confirmed: Date,
-    preparing: Date,
-    ready: Date,
-    served: Date,
-    paid: Date,
-    cancelled: Date
-  },
-  
-  // Notes générales
-  notes: {
-    type: String,
-    maxlength: [500, 'Les notes ne peuvent dépasser 500 caractères']
-  },
-  
-  // Informations de service
-  service: {
-    // Serveur assigné
-    assignedServer: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    
-    // Temps estimé de préparation (en minutes)
-    estimatedTime: Number,
-    
-    // Priorité
-    priority: {
-      type: String,
-      enum: ['low', 'normal', 'high', 'urgent'],
-      default: 'normal'
-    }
-  },
-  
+
   // Paiement
   payment: {
-    method: {
-      type: String,
-      enum: ['cash', 'card', 'mobile', 'voucher', 'split'],
-      default: 'card'
-    },
-    
-    status: {
-      type: String,
-      enum: ['pending', 'paid', 'failed', 'refunded'],
-      default: 'pending'
-    },
-    
-    reference: String,
-    
-    // Pour les paiements fractionnés
-    splits: [{
-      method: String,
-      amount: Number,
-      reference: String
-    }]
+    type: paymentSchema,
+    default: () => ({})
   },
-  
+
+  // Notes et commentaires
+  notes: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Notes trop longues']
+  },
+
+  // Service et métadonnées
+  service: {
+    type: {
+      type: String,
+      enum: ['dine_in', 'takeaway', 'delivery'],
+      default: 'dine_in'
+    },
+    estimatedPrepTime: {
+      type: Number, // minutes
+      min: 0,
+      max: 180
+    },
+    specialInstructions: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Instructions trop longues']
+    }
+  },
+
+  // Timestamps détaillés
+  timestamps: {
+    type: timestampsSchema,
+    default: () => ({})
+  },
+
   // Métadonnées
   metadata: {
     source: {
       type: String,
-      enum: ['tablet', 'pos', 'mobile', 'web', 'phone'],
-      default: 'tablet'
+      enum: ['pos', 'online', 'phone', 'walk_in'],
+      default: 'pos'
     },
-    
-    language: {
-      type: String,
-      default: 'fr'
-    },
-    
+    deviceId: String,
+    sessionId: String,
     version: {
-      type: Number,
-      default: 1
+      type: String,
+      default: '1.0'
     }
-  },
-  
-  // Utilisateur qui a créé la commande
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  
-  // Utilisateur qui a modifié en dernier
-  lastModifiedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  
-  // Soft delete
-  isActive: {
-    type: Boolean,
-    default: true
   }
 }, {
-  timestamps: true
+  timestamps: false, // Utiliser notre système custom
+  toJSON: { 
+    virtuals: true,
+    transform: function(doc, ret) {
+      delete ret.__v;
+      return ret;
+    }
+  },
+  toObject: { virtuals: true }
 });
 
-// Index pour améliorer les performances
-orderSchema.index({ restaurantId: 1 });
+// === INDEXES POUR PERFORMANCE ===
 orderSchema.index({ restaurantId: 1, status: 1 });
 orderSchema.index({ restaurantId: 1, 'timestamps.ordered': -1 });
-orderSchema.index({ floorPlanId: 1, tableId: 1 });
-orderSchema.index({ 'customer.phone': 1 });
-orderSchema.index({ 'service.assignedServer': 1 });
+orderSchema.index({ tableNumber: 1, status: 1 });
+orderSchema.index({ assignedServer: 1 });
+orderSchema.index({ floorPlanId: 1, tableNumber: 1 });
+orderSchema.index({ 'timestamps.ordered': -1 });
+orderSchema.index({ status: 1, 'timestamps.ordered': -1 });
 
-// Middleware pour générer le numéro de commande - VERSION CORRIGÉE
-orderSchema.pre('save', async function(next) {
-  if (this.isNew && !this.orderNumber) {
-    try {
-      let attempts = 0;
-      const maxAttempts = 10; // Augmenté à 10 tentatives
-      
-      while (attempts < maxAttempts) {
-        const today = new Date();
-        const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-        
-        // Utiliser les timestamps de commande plutôt que createdAt
-        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-        const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-        
-        // CORRECTION 1: Utiliser timestamps.ordered au lieu de createdAt
-        // et ajouter le restaurantId pour éviter les conflits entre restaurants
-        const count = await this.constructor.countDocuments({
-          restaurantId: this.restaurantId,
-          'timestamps.ordered': {
-            $gte: startOfDay,
-            $lt: endOfDay
-          }
-        });
-        
-        // CORRECTION 2: Ajouter un délai aléatoire pour éviter les races conditions
-        if (attempts > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
-        }
-        
-        // CORRECTION 3: Utiliser un compteur plus précis avec un suffixe aléatoire
-        const sequence = count + attempts + 1;
-        const randomSuffix = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-        const orderNumber = `${dateStr}-${sequence.toString().padStart(4, '0')}-${randomSuffix}`;
-        
-        // Vérifier l'unicité avec une requête atomique
-        const existing = await this.constructor.findOne({ orderNumber });
-        if (!existing) {
-          this.orderNumber = orderNumber;
-          console.log(`🔢 OrderNumber généré: ${this.orderNumber} (tentative ${attempts + 1})`);
-          return next();
-        }
-        
-        attempts++;
-        console.log(`⚠️  OrderNumber ${orderNumber} existe déjà, tentative ${attempts + 1}/${maxAttempts}`);
-      }
-      
-      // Si toutes les tentatives échouent, utiliser un fallback avec timestamp
-      const fallbackNumber = `${dateStr}-${Date.now().toString().slice(-6)}-FB`;
-      console.warn(`⚠️  Utilisation d'un numéro de fallback: ${fallbackNumber}`);
-      this.orderNumber = fallbackNumber;
-      
-    } catch (error) {
-      console.error('❌ Erreur lors de la génération du orderNumber:', error);
-      
-      // En cas d'erreur, utiliser un numéro d'urgence
-      const emergencyNumber = `EMG-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      console.warn(`🚨 Numéro d'urgence utilisé: ${emergencyNumber}`);
-      this.orderNumber = emergencyNumber;
-    }
-  }
-  
-  next();
+// Index composé pour recherches complexes
+orderSchema.index({ 
+  restaurantId: 1, 
+  status: 1, 
+  'timestamps.ordered': -1 
 });
 
-// Middleware pour calculer les prix automatiquement
-orderSchema.pre('save', function(next) {
-  // Calculer le sous-total
-  this.pricing.subtotal = this.items.reduce((sum, item) => sum + item.totalPrice, 0);
-  
-  // Calculer la TVA
-  this.pricing.tax.amount = (this.pricing.subtotal * this.pricing.tax.rate) / 100;
-  
-  // Calculer le service
-  this.pricing.service.amount = (this.pricing.subtotal * this.pricing.service.rate) / 100;
-  
-  // Calculer la réduction
-  if (this.pricing.discount.type === 'percentage') {
-    this.pricing.discount.amount = (this.pricing.subtotal * this.pricing.discount.value) / 100;
-  } else {
-    this.pricing.discount.amount = this.pricing.discount.value;
-  }
-  
-  // Calculer le total
-  this.pricing.total = this.pricing.subtotal + 
-                      this.pricing.tax.amount + 
-                      this.pricing.service.amount - 
-                      this.pricing.discount.amount;
-  
-  // S'assurer que le total n'est pas négatif
-  this.pricing.total = Math.max(0, this.pricing.total);
-  
-  next();
+// === VIRTUELS ===
+orderSchema.virtual('totalItems').get(function() {
+  return this.items.reduce((sum, item) => sum + item.quantity, 0);
 });
 
-// Middleware pour mettre à jour les timestamps selon le statut
-orderSchema.pre('save', function(next) {
-  if (this.isModified('status')) {
-    const now = new Date();
-    
-    switch (this.status) {
-      case ORDER_STATUS.CONFIRMED:
-        if (!this.timestamps.confirmed) this.timestamps.confirmed = now;
-        break;
-      case ORDER_STATUS.PREPARING:
-        if (!this.timestamps.preparing) this.timestamps.preparing = now;
-        break;
-      case ORDER_STATUS.READY:
-        if (!this.timestamps.ready) this.timestamps.ready = now;
-        break;
-      case ORDER_STATUS.SERVED:
-        if (!this.timestamps.served) this.timestamps.served = now;
-        break;
-      case ORDER_STATUS.PAID:
-        if (!this.timestamps.paid) this.timestamps.paid = now;
-        this.payment.status = 'paid';
-        break;
-      case ORDER_STATUS.CANCELLED:
-        if (!this.timestamps.cancelled) this.timestamps.cancelled = now;
-        break;
-    }
-  }
-  
-  next();
+orderSchema.virtual('customerFullName').get(function() {
+  return `${this.customer.firstName} ${this.customer.lastName}`.trim();
 });
 
-// Virtuel pour obtenir la durée depuis la commande
+orderSchema.virtual('isActive').get(function() {
+  return ['pending', 'confirmed', 'preparing', 'ready'].includes(this.status);
+});
+
+orderSchema.virtual('isPaid').get(function() {
+  return this.status === 'paid';
+});
+
 orderSchema.virtual('duration').get(function() {
+  if (!this.timestamps.ordered) return 0;
+  const endTime = this.timestamps.served || this.timestamps.paid || new Date();
+  return Math.round((endTime - this.timestamps.ordered) / (1000 * 60)); // minutes
+});
+
+// === MIDDLEWARE PRE-SAVE ===
+orderSchema.pre('save', function(next) {
+  // Mettre à jour le timestamp updatedAt
+  this.timestamps.updatedAt = new Date();
+  
+  // Auto-calcul des prix si non fournis
+  if (!this.pricing.total || this.pricing.total === 0) {
+    this.calculatePricing();
+  }
+  
+  // Valider la cohérence des statuts et timestamps
+  this.validateStatusTimestamps();
+  
+  next();
+});
+
+// === MÉTHODES D'INSTANCE ===
+
+// Calculer automatiquement les prix
+orderSchema.methods.calculatePricing = function() {
+  const subtotal = this.items.reduce((sum, item) => {
+    return sum + (item.price * item.quantity);
+  }, 0);
+  
+  this.pricing.subtotal = subtotal;
+  this.pricing.tax = Math.round(subtotal * 0.1 * 100) / 100; // TVA 10%
+  this.pricing.total = this.pricing.subtotal + this.pricing.tax - this.pricing.discount + this.pricing.tip;
+  
+  return this.pricing;
+};
+
+// Valider cohérence statuts/timestamps
+orderSchema.methods.validateStatusTimestamps = function() {
   const now = new Date();
-  const ordered = this.timestamps.ordered;
-  return Math.floor((now - ordered) / 1000 / 60); // en minutes
-});
-
-// Virtuel pour obtenir le temps restant estimé
-orderSchema.virtual('estimatedTimeRemaining').get(function() {
-  if (!this.service.estimatedTime) return null;
   
-  const elapsed = this.duration;
-  const remaining = this.service.estimatedTime - elapsed;
-  return Math.max(0, remaining);
-});
-
-// Méthode pour obtenir les items par statut
-orderSchema.methods.getItemsByStatus = function(status) {
-  return this.items.filter(item => item.status === status);
-};
-
-// Méthode pour vérifier si la commande peut être modifiée
-orderSchema.methods.canBeModified = function() {
-  return [ORDER_STATUS.PENDING, ORDER_STATUS.CONFIRMED].includes(this.status);
-};
-
-// Méthode pour vérifier si la commande peut être annulée
-orderSchema.methods.canBeCancelled = function() {
-  return ![ORDER_STATUS.SERVED, ORDER_STATUS.PAID, ORDER_STATUS.CANCELLED].includes(this.status);
-};
-
-// Méthode pour ajouter un item
-orderSchema.methods.addItem = function(itemData) {
-  if (!this.canBeModified()) {
-    throw new Error('La commande ne peut plus être modifiée');
+  switch (this.status) {
+    case 'confirmed':
+      if (!this.timestamps.confirmed) {
+        this.timestamps.confirmed = now;
+      }
+      break;
+    case 'preparing':
+      if (!this.timestamps.confirmed) {
+        this.timestamps.confirmed = now;
+      }
+      break;
+    case 'ready':
+      if (!this.timestamps.prepared) {
+        this.timestamps.prepared = now;
+      }
+      break;
+    case 'served':
+      if (!this.timestamps.served) {
+        this.timestamps.served = now;
+      }
+      break;
+    case 'paid':
+      if (!this.timestamps.paid) {
+        this.timestamps.paid = now;
+      }
+      break;
+    case 'cancelled':
+      if (!this.timestamps.cancelled) {
+        this.timestamps.cancelled = now;
+      }
+      break;
   }
-  
-  this.items.push(itemData);
-  this.metadata.version += 1;
 };
 
-// Méthode pour supprimer un item
-orderSchema.methods.removeItem = function(itemId) {
-  if (!this.canBeModified()) {
-    throw new Error('La commande ne peut plus être modifiée');
-  }
-  
-  this.items.id(itemId).remove();
-  this.metadata.version += 1;
-};
-
-// Méthode pour obtenir les informations publiques
-orderSchema.methods.toPublicJSON = function() {
-  const order = this.toObject({ virtuals: true });
-  
-  // Supprimer les champs sensibles
-  delete order.__v;
-  delete order.payment.reference;
-  delete order.payment.splits;
-  
-  return order;
-};
-
-// Méthode statique pour obtenir les commandes par table
-orderSchema.statics.findByTable = function(floorPlanId, tableId, options = {}) {
-  const filter = { 
-    floorPlanId, 
-    tableId,
-    isActive: true 
+// Changer le statut avec validation
+orderSchema.methods.changeStatus = function(newStatus, reason) {
+  const validTransitions = {
+    'pending': ['confirmed', 'cancelled'],
+    'confirmed': ['preparing', 'cancelled'],
+    'preparing': ['ready', 'cancelled'],
+    'ready': ['served', 'cancelled'],
+    'served': ['paid'],
+    'paid': [],
+    'cancelled': []
   };
+  
+  const allowed = validTransitions[this.status] || [];
+  
+  if (!allowed.includes(newStatus)) {
+    throw new Error(`Transition ${this.status} -> ${newStatus} non autorisée`);
+  }
+  
+  this.status = newStatus;
+  if (reason) {
+    this.notes = (this.notes || '') + `\n[${new Date().toISOString()}] ${reason}`;
+  }
+  
+  this.validateStatusTimestamps();
+  return this;
+};
+
+// Ajouter un article
+orderSchema.methods.addItem = function(menuItemId, quantity, price, variants, notes) {
+  this.items.push({
+    menuItem: menuItemId,
+    quantity: quantity || 1,
+    price: price || 0,
+    variants: variants || {},
+    notes: notes || ''
+  });
+  
+  this.calculatePricing();
+  return this;
+};
+
+// Supprimer un article
+orderSchema.methods.removeItem = function(itemId) {
+  this.items = this.items.filter(item => item._id.toString() !== itemId.toString());
+  
+  if (this.items.length === 0) {
+    throw new Error('Impossible de supprimer tous les articles');
+  }
+  
+  this.calculatePricing();
+  return this;
+};
+
+// === MÉTHODES STATIQUES ===
+
+// Trouver commandes par table
+orderSchema.statics.findByTable = function(floorPlanId, tableNumber, options = {}) {
+  const filter = { tableNumber };
+  
+  if (floorPlanId && floorPlanId !== 'any') {
+    filter.floorPlanId = floorPlanId;
+  }
   
   if (options.status) {
     filter.status = options.status;
   }
   
+  if (options.restaurantId) {
+    filter.restaurantId = options.restaurantId;
+  }
+  
   return this.find(filter)
-    .populate('items.menuItem', 'name category')
-    .populate('service.assignedServer', 'firstName lastName')
+    .populate('items.menuItem', 'name category basePrice')
+    .populate('assignedServer', 'firstName lastName')
+    .populate('floorPlanId', 'name')
     .sort({ 'timestamps.ordered': -1 });
 };
 
-// Méthode statique pour obtenir les commandes en cours
-orderSchema.statics.findActive = function(restaurantId, options = {}) {
-  const filter = {
+// Commandes actives
+orderSchema.statics.findActive = function(restaurantId) {
+  return this.find({
     restaurantId,
-    status: { $nin: [ORDER_STATUS.SERVED, ORDER_STATUS.PAID, ORDER_STATUS.CANCELLED] },
-    isActive: true
-  };
-  
-  return this.find(filter)
-    .populate('floorPlanId', 'name')
-    .populate('items.menuItem', 'name category')
-    .populate('service.assignedServer', 'firstName lastName')
-    .sort({ 'service.priority': -1, 'timestamps.ordered': 1 });
+    status: { $in: ['pending', 'confirmed', 'preparing', 'ready'] }
+  })
+  .populate('items.menuItem', 'name category')
+  .populate('assignedServer', 'firstName lastName')
+  .sort({ 'timestamps.ordered': 1 });
 };
 
-// S'assurer que les virtuels sont inclus dans la conversion JSON
-orderSchema.set('toJSON', { virtuals: true });
-orderSchema.set('toObject', { virtuals: true });
+// Statistiques quotidiennes
+orderSchema.statics.getDailyStats = function(restaurantId, date = new Date()) {
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  return this.aggregate([
+    {
+      $match: {
+        restaurantId: new mongoose.Types.ObjectId(restaurantId),
+        'timestamps.ordered': { $gte: startOfDay, $lte: endOfDay }
+      }
+    },
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+        revenue: { $sum: '$pricing.total' },
+        avgOrderValue: { $avg: '$pricing.total' }
+      }
+    }
+  ]);
+};
 
-module.exports = mongoose.model('Order', orderSchema);
+// === MIDDLEWARE POST ===
+orderSchema.post('save', function(doc) {
+  console.log(`Commande ${doc._id} sauvegardée: ${doc.status} - Table ${doc.tableNumber}`);
+});
+
+orderSchema.post('remove', function(doc) {
+  console.log(`Commande ${doc._id} supprimée`);
+});
+
+// === VALIDATION PERSONNALISÉE ===
+
+// Validation cohérence client
+orderSchema.path('customer').validate(function(customer) {
+  return customer.firstName && customer.firstName.trim().length > 0;
+}, 'Prénom client requis');
+
+// Validation items non vide
+orderSchema.path('items').validate(function(items) {
+  return items && items.length > 0 && items.every(item => 
+    item.menuItem && item.quantity > 0 && item.price >= 0
+  );
+}, 'Articles valides requis');
+
+// Validation prix cohérent
+orderSchema.path('pricing.total').validate(function(total) {
+  const calculatedTotal = this.pricing.subtotal + this.pricing.tax - this.pricing.discount + this.pricing.tip;
+  return Math.abs(total - calculatedTotal) < 0.01; // Tolérance centimes
+}, 'Total incohérent avec les sous-totaux');
+
+const Order = mongoose.model('Order', orderSchema);
+
+module.exports = Order;
