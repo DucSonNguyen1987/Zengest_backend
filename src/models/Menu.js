@@ -331,4 +331,17 @@ menuItemSchema.statics.searchItems = function(restaurantId, searchTerm, filters 
 menuItemSchema.set('toJSON', { virtuals: true });
 menuItemSchema.set('toObject', { virtuals: true });
 
-module.exports = mongoose.model('MenuItem', menuItemSchema);
+
+
+
+let MenuItem;
+
+try {
+  // Essayer de récupérer le modèle existant
+  MenuItem = mongoose.model('MenuItem');
+} catch (error) {
+  // Si le modèle n'existe pas, le créer
+  MenuItem = mongoose.model('MenuItem', menuItemSchema);
+}
+
+module.exports = MenuItem;

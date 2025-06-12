@@ -242,45 +242,9 @@ const requireRole = (roles) => {
   };
 };
 
-// CORRECTION: Middleware pour vérifier le même restaurant (assouplissement)
-const requireSameRestaurant = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentification requise.',
-      code: 'AUTH_REQUIRED'
-    });
-  }
 
-  // Admin a accès à tous les restaurants
-  if (req.user.role === 'admin') {
-    console.log('Admin - accès tous restaurants autorisé');
-    return next();
-  }
 
-  // CORRECTION: Owner sans restaurant peut toujours agir
-  if (req.user.role === 'owner') {
-    console.log('Owner - accès autorisé (avec ou sans restaurant)');
-    return next();
-  }
-
-  // Vérifier que l'utilisateur a un restaurant assigné
-  if (!req.user.restaurantId) {
-    console.log(`Utilisateur ${req.user.email} sans restaurant assigné`);
-    return res.status(403).json({
-      success: false,
-      message: 'Aucun restaurant assigné.',
-      code: 'NO_RESTAURANT_ASSIGNED'
-    });
-  }
-
-  // Ajouter l'ID du restaurant à la requête pour filtrage
-  req.restaurantId = req.user.restaurantId._id || req.user.restaurantId;
-  
-  console.log(`Restaurant vérifié: ${req.user.restaurantId.name || req.user.restaurantId} pour ${req.user.email}`);
-  next();
-};
-
+ 
 // Middleware pour les opérations staff
 const requireStaff = (req, res, next) => {
   const staffRoles = ['admin', 'owner', 'manager', 'staff_floor', 'staff_bar', 'staff_kitchen'];
@@ -353,7 +317,6 @@ module.exports = {
   auth,
   requirePermission,
   requireRole,
-  requireSameRestaurant,
   requireStaff,
   requireManagement,
   optionalAuth,

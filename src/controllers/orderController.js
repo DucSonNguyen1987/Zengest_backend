@@ -1,143 +1,118 @@
-/**
- * CORRECTION: src/controllers/orderController.js
- * Corriger gestion floorPlanId et populate
- */
-
 const Order = require('../models/Order');
-const MenuItem = require('../models/Menu');
+const MenuItem = require('../models/MenuItem');
 const FloorPlan = require('../models/FloorPlan');
-const User = require('../models/User');
-const { createPagination } = require('../utils/pagination');
+const { USER_ROLES } = require('../utils/constants');
 
-// === FONCTION UTILITAIRE POUR FLOORPLAN ===
-const getOrCreateDefaultFloorPlan = async (restaurantId) => {
-  try {
-    // Chercher plan par défaut
-    let defaultPlan = await FloorPlan.findOne({ 
-      restaurantId, 
-      isDefault: true 
-    });
-    
-    if (defaultPlan) {
-      console.log('Plan par défaut trouvé:', defaultPlan.name);
-      return defaultPlan;
-    }
-    
-    // Chercher n'importe quel plan actif
-    defaultPlan = await FloorPlan.findOne({ 
-      restaurantId, 
-      isActive: true 
-    });
-    
-    if (defaultPlan) {
-      console.log('Plan actif utilisé:', defaultPlan.name);
-      return defaultPlan;
-    }
-    
-    // Créer un plan minimal si aucun n'existe
-    console.log('Aucun plan trouvé - création plan minimal');
-    const minimalPlan = new FloorPlan({
-      name: 'Plan par défaut',
-      description: 'Plan créé automatiquement',
-      restaurantId,
-      dimensions: { width: 800, height: 600, unit: 'cm' },
-      tables: [
-        {
-          number: '1',
-          capacity: 4,
-          position: { x: 100, y: 100 },
-          dimensions: { width: 120, height: 120 },
-          shape: 'square',
-          status: 'available',
-          isActive: true
-        }
-      ],
-      obstacles: [],
-      isDefault: true,
-      isActive: true
-    });
-    
-    const savedPlan = await minimalPlan.save();
-    console.log('Plan minimal créé:', savedPlan.name);
-    return savedPlan;
-    
-  } catch (error) {
-    console.error('Erreur gestion plan par défaut:', error);
-    return null;
-  }
-};
+// === FONCTIONS UTILITAIRES ===
 
-// === FONCTION UTILITAIRE POPULATE SÉCURISÉE ===
 const safePopulate = (query, path, select) => {
   try {
     return query.populate(path, select);
   } catch (error) {
-    console.warn(`Populate ${path} échoué, continuant sans:`, error.message);
+    console.warn(`Populate échoué pour ${path}:`, error.message);
     return query;
   }
+};
+
+const normalizeCustomer = (customer) => {
+  if (!customer) return null;
+  
+  // Format flexible : name OU firstName/lastName
+  if (customer.name && !customer.firstName && !customer.lastName) {
+    const nameParts = customer.name.trim().split(' ');
+    return {
+      firstName: nameParts[0] || 'Client',
+      lastName: nameParts.slice(1).join(' ') || '',
+      phone: customer.phone || '',
+      email: customer.email || '',
+      specialRequests: customer.specialRequests || ''
+    };
+  }
+  
+  return {
+    firstName: customer.firstName || 'Client',
+    lastName: customer.lastName || '',
+    phone: customer.phone || '',
+    email: customer.email || '',
+    specialRequests: customer.specialRequests || ''
+  };
 };
 
 // === MÉTHODES PRINCIPALES ===
 
 /**
  * Récupérer toutes les commandes avec pagination
+ * GET /api/orders
  */
 exports.getAllOrders = async (req, res) => {
   try {
-    console.log('getAllOrders appelé par:', req.user?.email);
+    console.log('getAllOrders appelé avec query:', req.query);
     
     const {
       page = 1,
       limit = 10,
       status,
-      assignedServer,
-      tableNumber,
-      startDate,
-      endDate,
       sortBy = 'timestamps.ordered',
       sortOrder = 'desc'
     } = req.query;
 
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
     // Construire le filtre
     const filter = { restaurantId: req.user.restaurantId };
-    
     if (status) filter.status = status;
-    if (assignedServer) filter.assignedServer = assignedServer;
-    if (tableNumber) filter.tableNumber = new RegExp(tableNumber, 'i');
-    
-    if (startDate || endDate) {
-      filter['timestamps.ordered'] = {};
-      if (startDate) filter['timestamps.ordered'].$gte = new Date(startDate);
-      if (endDate) filter['timestamps.ordered'].$lte = new Date(endDate);
-    }
 
-    const pagination = createPagination(page, limit, 0);
-    
-    // Requête avec populate sécurisé
+    console.log('Filtre utilisé:', filter);
+    console.log('Pagination:', { page: pageNum, limit: limitNum, skip });
+
+    // Compter le total
+    const total = await Order.countDocuments(filter);
+    console.log('Total de commandes trouvées:', total);
+
+    // Construire la requête avec tri
+    const sortObj = {};
+    sortObj[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
     let query = Order.find(filter)
-      .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-      .limit(pagination.limit)
-      .skip(pagination.skip);
+      .sort(sortObj)
+      .limit(limitNum)
+      .skip(skip);
 
     // Populate sécurisé
     query = safePopulate(query, 'items.menuItem', 'name category basePrice');
     query = safePopulate(query, 'assignedServer', 'firstName lastName');
     query = safePopulate(query, 'floorPlanId', 'name');
-    
+    query = safePopulate(query, 'restaurantId', 'name');
+
     const orders = await query.exec();
-    const total = await Order.countDocuments(filter);
-    const finalPagination = createPagination(page, limit, total);
+    console.log('Commandes récupérées:', orders.length);
 
-    console.log('Commandes récupérées:', orders.length, 'sur', total);
+    // Calculer la pagination
+    const totalPages = Math.ceil(total / limitNum);
+    const hasNextPage = pageNum < totalPages;
+    const hasPrevPage = pageNum > 1;
 
-    res.json({
+    const response = {
       success: true,
       data: {
         orders,
-        pagination: finalPagination,
-        filter: { status, assignedServer, tableNumber }
+        pagination: {
+          currentPage: pageNum,
+          totalPages,
+          totalItems: total,
+          itemsPerPage: limitNum,
+          hasNextPage,
+          hasPrevPage,
+          nextPage: hasNextPage ? pageNum + 1 : null,
+          prevPage: hasPrevPage ? pageNum - 1 : null
+        }
       }
-    });
+    };
+
+    console.log('Réponse pagination:', response.data.pagination);
+    res.json(response);
 
   } catch (error) {
     console.error('Erreur getAllOrders:', error);
@@ -150,162 +125,171 @@ exports.getAllOrders = async (req, res) => {
 };
 
 /**
- * Créer une nouvelle commande avec gestion FloorPlan automatique
+ * Créer une nouvelle commande
+ * POST /api/orders
  */
 exports.createOrder = async (req, res) => {
   try {
-    console.log('createOrder appelé par:', req.user?.email);
+    console.log('createOrder appelé avec body:', JSON.stringify(req.body, null, 2));
     
-    let { 
-      floorPlanId, 
-      tableNumber, 
-      tableId, 
-      customer, 
-      items, 
-      assignedServer,
-      priority = 'normal',
+    const {
+      floorPlanId,
+      tableNumber,
+      tableId,
+      customer,
+      items = [],
       notes = '',
-      service = {}
+      priority = 'normal'
     } = req.body;
 
-    const restaurantId = req.body.restaurantId || req.user.restaurantId;
+    // Validation de base
+    if (!items || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Au moins un item est requis pour créer une commande'
+      });
+    }
 
-    // === GESTION FLOORPLAN AUTOMATIQUE ===
-    if (!floorPlanId) {
-      console.log('FloorPlanId manquant - recherche plan par défaut...');
-      const defaultPlan = await getOrCreateDefaultFloorPlan(restaurantId);
+    // === GESTION FLEXIBLE DU PLAN DE SALLE ===
+    let finalFloorPlanId = floorPlanId;
+    
+    if (!finalFloorPlanId) {
+      console.log('Aucun floorPlanId fourni, recherche du plan par défaut...');
+      const defaultPlan = await FloorPlan.findOne({ 
+        restaurantId: req.user.restaurantId 
+      }).sort({ createdAt: 1 });
       
-      if (!defaultPlan) {
+      if (defaultPlan) {
+        finalFloorPlanId = defaultPlan._id;
+        console.log('Plan par défaut trouvé:', finalFloorPlanId);
+      } else {
+        console.log('Aucun plan trouvé, commande sans plan de salle');
+      }
+    }
+
+    // === NORMALISATION DU CLIENT ===
+    const normalizedCustomer = normalizeCustomer(customer);
+    console.log('Client normalisé:', normalizedCustomer);
+
+    // === TRAITEMENT DES ITEMS ===
+    const processedItems = [];
+    let subtotal = 0;
+
+    for (const item of items) {
+      if (!item.menuItem) {
         return res.status(400).json({
           success: false,
-          message: 'Impossible de déterminer le plan de salle. Veuillez spécifier floorPlanId.'
+          message: 'menuItem requis pour chaque item'
         });
       }
-      
-      floorPlanId = defaultPlan._id;
-      console.log('Plan par défaut utilisé:', defaultPlan.name);
-    } else {
-      // Vérifier que le plan existe
-      const floorPlan = await FloorPlan.findById(floorPlanId);
-      if (!floorPlan) {
-        console.log('Plan spécifié introuvable, utilisation plan par défaut...');
-        const defaultPlan = await getOrCreateDefaultFloorPlan(restaurantId);
-        floorPlanId = defaultPlan?._id;
-        
-        if (!floorPlanId) {
-          return res.status(400).json({
-            success: false,
-            message: 'Plan de salle spécifié introuvable et aucun plan par défaut disponible'
-          });
+
+      const menuItem = await MenuItem.findById(item.menuItem);
+      if (!menuItem || !menuItem.isActive) {
+        return res.status(400).json({
+          success: false,
+          message: `Item de menu non disponible: ${item.menuItem}`
+        });
+      }
+
+      // Gestion des variantes de prix
+      let unitPrice = menuItem.basePrice;
+      if (item.selectedVariant && menuItem.priceVariants) {
+        const variant = menuItem.priceVariants.find(v => 
+          v.size === item.selectedVariant.size
+        );
+        if (variant) {
+          unitPrice = variant.price;
         }
       }
-    }
 
-    // === GESTION CLIENT FLEXIBLE ===
-    let normalizedCustomer;
-    if (customer.firstName && customer.lastName) {
-      normalizedCustomer = customer;
-    } else if (customer.name) {
-      const nameParts = customer.name.trim().split(' ');
-      normalizedCustomer = {
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        email: customer.email,
-        phone: customer.phone,
-        notes: customer.notes || ''
+      const quantity = Math.max(1, parseInt(item.quantity) || 1);
+      const totalPrice = unitPrice * quantity;
+
+      const orderItem = {
+        menuItem: menuItem._id,
+        menuItemSnapshot: {
+          name: menuItem.name,
+          description: menuItem.description,
+          category: menuItem.category,
+          basePrice: menuItem.basePrice
+        },
+        selectedVariant: item.selectedVariant || { size: 'standard', price: unitPrice },
+        quantity,
+        unitPrice,
+        totalPrice,
+        notes: item.notes || '',
+        modifications: item.modifications || []
       };
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: 'Informations client requises (name ou firstName/lastName)'
-      });
+
+      processedItems.push(orderItem);
+      subtotal += totalPrice;
     }
 
-    // === GESTION TABLE ===
-    const finalTableNumber = tableNumber || tableId || `T-${Date.now()}`;
+    // === CALCULS FINANCIERS ===
+    const tva = Math.round(subtotal * 0.1 * 100) / 100; // 10% TVA
+    const total = Math.round((subtotal + tva) * 100) / 100;
 
-    // === VALIDATION ITEMS ===
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Au moins un article doit être commandé'
-      });
-    }
+    const pricing = {
+      subtotal,
+      tva,
+      total,
+      currency: 'EUR'
+    };
 
-    // Vérifier que les items existent
-    const menuItemIds = items.map(item => item.menuItem);
-    const menuItems = await MenuItem.find({ _id: { $in: menuItemIds } });
+    // === GESTION DU NUMÉRO DE TABLE ===
+    const finalTableNumber = tableNumber || tableId || `T${Date.now()}`;
     
-    if (menuItems.length !== menuItemIds.length) {
-      return res.status(400).json({
-        success: false,
-        message: 'Certains articles du menu sont introuvables'
-      });
-    }
-
-    // === CALCUL PRIX ===
-    let subtotal = 0;
-    const validatedItems = items.map(item => {
-      const menuItem = menuItems.find(mi => mi._id.toString() === item.menuItem);
-      const price = item.price || menuItem.basePrice || 0;
-      subtotal += price * item.quantity;
-      
-      return {
-        menuItem: item.menuItem,
-        quantity: item.quantity,
-        price,
-        variants: item.variants || {},
-        notes: item.notes || ''
-      };
-    });
-
-    const tax = subtotal * 0.1; // 10% TVA
-    const total = subtotal + tax;
-
-    // === CRÉATION COMMANDE ===
+    // === CRÉATION DE LA COMMANDE ===
     const newOrder = new Order({
-      restaurantId,
-      floorPlanId,
+      restaurantId: req.user.restaurantId,
+      floorPlanId: finalFloorPlanId,
       tableNumber: finalTableNumber,
       customer: normalizedCustomer,
-      items: validatedItems,
+      items: processedItems,
       status: 'pending',
-      priority,
-      assignedServer: assignedServer || null,
-      pricing: {
-        subtotal,
-        tax,
-        discount: 0,
-        total
+      priority: priority,
+      assignedServer: req.user._id,
+      pricing: pricing,
+      payment: {
+        method: null,
+        status: 'pending',
+        transactionId: null
       },
-      notes,
-      service,
       timestamps: {
         ordered: new Date()
-      }
+      },
+      notes: notes
     });
-
+    
     const savedOrder = await newOrder.save();
     
-    // Populate pour la réponse
-    let populatedOrder = await Order.findById(savedOrder._id);
-    populatedOrder = await safePopulate(Order.findById(savedOrder._id), 'items.menuItem', 'name category');
-    populatedOrder = await safePopulate(populatedOrder, 'assignedServer', 'firstName lastName');
-    populatedOrder = await safePopulate(populatedOrder, 'floorPlanId', 'name');
-
-    console.log('Commande créée:', savedOrder._id, 'Table:', finalTableNumber);
-
+    // Peupler les références pour la réponse
+    await savedOrder.populate([
+      { path: 'items.menuItem', select: 'name category' },
+      { path: 'assignedServer', select: 'firstName lastName' },
+      { path: 'restaurantId', select: 'name' },
+      { path: 'floorPlanId', select: 'name' }
+    ]);
+    
+    console.log('✅ Commande créée avec succès:', {
+      id: savedOrder._id,
+      customer: `${normalizedCustomer.firstName} ${normalizedCustomer.lastName}`,
+      items: processedItems.length,
+      total: pricing.total,
+      table: finalTableNumber
+    });
+    
     res.status(201).json({
       success: true,
       message: 'Commande créée avec succès',
-      data: { order: populatedOrder }
+      data: { order: savedOrder }
     });
-
+    
   } catch (error) {
-    console.error('Erreur createOrder:', error);
+    console.error('❌ Erreur createOrder:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la création de la commande',
+      message: 'Erreur serveur lors de la création de la commande',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -313,19 +297,20 @@ exports.createOrder = async (req, res) => {
 
 /**
  * Récupérer une commande par ID
+ * GET /api/orders/:id
  */
 exports.getOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('getOrder appelé pour ID:', id);
-
+    
     let query = Order.findById(id);
-    query = safePopulate(query, 'items.menuItem', 'name category basePrice images');
+    query = safePopulate(query, 'items.menuItem', 'name category basePrice');
     query = safePopulate(query, 'assignedServer', 'firstName lastName');
     query = safePopulate(query, 'floorPlanId', 'name');
+    query = safePopulate(query, 'restaurantId', 'name');
     
     const order = await query.exec();
-
+    
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -333,8 +318,8 @@ exports.getOrder = async (req, res) => {
       });
     }
 
-    // Vérification permissions restaurant
-    if (order.restaurantId.toString() !== req.user.restaurantId.toString()) {
+    // Vérification permissions
+    if (order.restaurantId._id.toString() !== req.user.restaurantId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à cette commande'
@@ -358,6 +343,7 @@ exports.getOrder = async (req, res) => {
 
 /**
  * Récupérer les commandes actives
+ * GET /api/orders/active
  */
 exports.getActiveOrders = async (req, res) => {
   try {
@@ -395,11 +381,20 @@ exports.getActiveOrders = async (req, res) => {
 
 /**
  * Modifier le statut d'une commande
+ * PATCH /api/orders/:id/status
  */
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, reason } = req.body;
+
+    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'served', 'paid', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Statut invalide. Statuts valides: ${validStatuses.join(', ')}`
+      });
+    }
 
     const order = await Order.findById(id);
     if (!order) {
@@ -469,81 +464,120 @@ exports.updateOrderStatus = async (req, res) => {
 };
 
 /**
- * Statistiques des commandes
+ * Traiter un paiement
+ * POST /api/orders/:id/payment
+ */
+exports.processPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { method, amount, tip = 0 } = req.body;
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Commande non trouvée'
+      });
+    }
+
+    // Vérifications
+    if (order.payment.status === 'paid') {
+      return res.status(400).json({
+        success: false,
+        message: 'Commande déjà payée'
+      });
+    }
+
+    const totalDue = order.pricing.total;
+    const finalAmount = amount || totalDue;
+
+    // Mettre à jour le paiement
+    order.payment = {
+      method,
+      amount: finalAmount,
+      tip: tip || 0,
+      status: 'paid',
+      transactionId: `TXN_${Date.now()}`,
+      processedAt: new Date()
+    };
+
+    // Mettre à jour le pricing si pourboire
+    if (tip > 0) {
+      order.pricing.tip = tip;
+      order.pricing.total = totalDue + tip;
+    }
+
+    order.status = 'paid';
+    order.timestamps.paid = new Date();
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: 'Paiement traité avec succès',
+      data: { 
+        order,
+        payment: order.payment,
+        total: order.pricing.total
+      }
+    });
+
+  } catch (error) {
+    console.error('Erreur processPayment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors du traitement du paiement',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Récupérer les statistiques des commandes
+ * GET /api/orders/statistics/summary
  */
 exports.getOrderStatistics = async (req, res) => {
   try {
     const { period = 'today' } = req.query;
-    const restaurantId = req.user.restaurantId;
-
-    // Déterminer les dates selon la période
-    let startDate, endDate = new Date();
     
-    switch (period) {
-      case 'today':
-        startDate = new Date();
-        startDate.setHours(0, 0, 0, 0);
-        endDate.setHours(23, 59, 59, 999);
-        break;
-      case 'week':
-        startDate = new Date();
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case 'month':
-        startDate = new Date();
-        startDate.setMonth(startDate.getMonth() - 1);
-        break;
-      default:
-        startDate = new Date();
-        startDate.setHours(0, 0, 0, 0);
+    let startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    
+    if (period === 'week') {
+      startDate.setDate(startDate.getDate() - 7);
+    } else if (period === 'month') {
+      startDate.setMonth(startDate.getMonth() - 1);
     }
 
-    const filter = {
-      restaurantId,
-      'timestamps.ordered': { $gte: startDate, $lte: endDate }
+    const orders = await Order.find({
+      restaurantId: req.user.restaurantId,
+      'timestamps.ordered': { $gte: startDate }
+    });
+
+    const summary = {
+      totalOrders: orders.length,
+      totalRevenue: orders.reduce((sum, order) => sum + (order.pricing?.total || 0), 0),
+      averageOrderValue: 0,
+      statusBreakdown: {},
+      topItems: []
     };
 
-    // Statistiques de base
-    const totalOrders = await Order.countDocuments(filter);
-    
-    const revenueData = await Order.aggregate([
-      { $match: filter },
-      { $group: {
-        _id: null,
-        totalRevenue: { $sum: '$pricing.total' },
-        averageOrder: { $avg: '$pricing.total' },
-        totalGuests: { $sum: { $sum: '$items.quantity' } }
-      }}
-    ]);
+    if (summary.totalOrders > 0) {
+      summary.averageOrderValue = summary.totalRevenue / summary.totalOrders;
+    }
 
-    const revenue = revenueData[0] || { totalRevenue: 0, averageOrder: 0, totalGuests: 0 };
-
-    // Répartition par statut
-    const statusBreakdown = await Order.aggregate([
-      { $match: filter },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
-
-    // Top serveurs
-    const topServers = await Order.aggregate([
-      { $match: { ...filter, assignedServer: { $exists: true, $ne: null } } },
-      { $group: { _id: '$assignedServer', orderCount: { $sum: 1 }, revenue: { $sum: '$pricing.total' } } },
-      { $sort: { orderCount: -1 } },
-      { $limit: 5 }
-    ]);
+    // Breakdown par statut
+    orders.forEach(order => {
+      summary.statusBreakdown[order.status] = (summary.statusBreakdown[order.status] || 0) + 1;
+    });
 
     res.json({
       success: true,
       data: {
+        summary,
         period,
-        summary: {
-          totalOrders,
-          totalRevenue: revenue.totalRevenue,
-          averageOrderValue: revenue.averageOrder,
-          totalGuests: revenue.totalGuests
-        },
-        statusBreakdown,
-        topServers
+        startDate,
+        endDate: new Date()
       }
     });
 
@@ -557,4 +591,41 @@ exports.getOrderStatistics = async (req, res) => {
   }
 };
 
-module.exports = exports;
+/**
+ * Récupérer les commandes par table
+ * GET /api/orders/table/:planId/:tableId
+ */
+exports.getOrdersByTable = async (req, res) => {
+  try {
+    const { planId, tableId } = req.params;
+    
+    const orders = await Order.find({
+      restaurantId: req.user.restaurantId,
+      floorPlanId: planId,
+      tableNumber: tableId,
+      status: { $nin: ['paid', 'cancelled'] }
+    })
+    .populate('items.menuItem', 'name category')
+    .populate('assignedServer', 'firstName lastName')
+    .sort({ 'timestamps.ordered': -1 });
+
+    res.json({
+      success: true,
+      data: { 
+        orders,
+        table: {
+          planId,
+          tableId
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Erreur getOrdersByTable:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des commandes par table',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};

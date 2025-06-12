@@ -22,15 +22,15 @@ const requireSameRestaurant = async (req, res, next) => {
 
     const userRole = req.user.role.toLowerCase();
     
-    // CORRECTION: Admin a accès à tous les restaurants
+    // ✅ CORRECTION: Admin a accès à tous les restaurants SANS vérification
     if (userRole === 'admin') {
-      console.log('Admin - accès tous restaurants autorisé');
+      console.log('✅ Admin - accès tous restaurants autorisé');
       return next();
     }
 
-    // CORRECTION: Owner peut agir même sans restaurant assigné
+    // ✅ CORRECTION: Owner peut agir même sans restaurant assigné
     if (userRole === 'owner') {
-      console.log('Owner - accès autorisé (gestion restaurant)');
+      console.log('✅ Owner - accès autorisé (gestion restaurant)');
       
       // Si owner a un restaurant, l'ajouter pour filtrage
       if (req.user.restaurantId) {
@@ -42,7 +42,7 @@ const requireSameRestaurant = async (req, res, next) => {
 
     // Pour les autres rôles, vérifier l'assignation restaurant
     if (!req.user.restaurantId) {
-      console.log(`Utilisateur ${req.user.email} (${userRole}) sans restaurant assigné`);
+      console.log(`❌ Utilisateur ${req.user.email} (${userRole}) sans restaurant assigné`);
       return res.status(403).json({
         success: false,
         message: 'Aucun restaurant assigné. Contactez un administrateur.',
@@ -52,9 +52,11 @@ const requireSameRestaurant = async (req, res, next) => {
     }
 
     // Vérifier que le restaurant existe et est actif
+    const Restaurant = require('../models/Restaurant');
     const restaurant = await Restaurant.findById(req.user.restaurantId);
+    
     if (!restaurant) {
-      console.log(`Restaurant ${req.user.restaurantId} non trouvé pour ${req.user.email}`);
+      console.log(`❌ Restaurant ${req.user.restaurantId} non trouvé pour ${req.user.email}`);
       return res.status(403).json({
         success: false,
         message: 'Restaurant assigné introuvable',
@@ -63,7 +65,7 @@ const requireSameRestaurant = async (req, res, next) => {
     }
 
     if (!restaurant.isActive) {
-      console.log(`Restaurant ${restaurant.name} inactif pour ${req.user.email}`);
+      console.log(`❌ Restaurant ${restaurant.name} inactif pour ${req.user.email}`);
       return res.status(403).json({
         success: false,
         message: 'Restaurant temporairement indisponible',
@@ -75,15 +77,16 @@ const requireSameRestaurant = async (req, res, next) => {
     req.restaurantId = req.user.restaurantId._id || req.user.restaurantId;
     req.restaurant = restaurant;
 
-    console.log(`Restaurant vérifié: ${restaurant.name} pour ${req.user.email} (${userRole})`);
+    console.log(`✅ Restaurant vérifié: ${restaurant.name} pour ${req.user.email} (${userRole})`);
     next();
 
   } catch (error) {
-    console.error('Erreur requireSameRestaurant:', error);
+    console.error('❌ Erreur requireSameRestaurant:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur de vérification restaurant',
-      code: 'RESTAURANT_CHECK_ERROR'
+      message: 'Erreur de vérification des permissions',
+      code: 'RESTAURANT_CHECK_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

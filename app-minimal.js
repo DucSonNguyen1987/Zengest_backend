@@ -6,7 +6,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 
-console.log('Ì¥ç D√âMARRAGE PROGRESSIF - Identification de la route probl√©matique');
+console.log('üîç D√âMARRAGE PROGRESSIF - Identification de la route probl√©matique');
 
 const app = express();
 
@@ -33,113 +33,135 @@ app.get('/api/health', (req, res) => {
 console.log('‚úÖ Route de test /api/health install√©e');
 
 // === CHARGEMENT PROGRESSIF DES ROUTES ===
-console.log('\nÌ≥ç D√âBUT DU CHARGEMENT DES ROUTES...');
+console.log('\nüìç D√âBUT DU CHARGEMENT DES ROUTES...');
 
 // Route 1: Auth (la plus simple)
 try {
-  console.log('Ì≥Å 1/8 Chargement src/routes/auth.js...');
+  console.log('üìÅ 1/8 Chargement src/routes/auth.js...');
   const authRoutes = require('./src/routes/auth');
   app.use('/api/auth', authRoutes);
   console.log('‚úÖ 1/8 Routes AUTH charg√©es avec succ√®s');
 } catch (error) {
   console.error('‚ùå 1/8 ERREUR routes AUTH:', error.message);
   console.error('Stack:', error.stack.split('\n').slice(0, 5).join('\n'));
-  console.log('Ìªë ROUTE PROBL√âMATIQUE IDENTIFI√âE: AUTH');
+  console.log('üõë ROUTE PROBL√âMATIQUE IDENTIFI√âE: AUTH');
   process.exit(1);
 }
 
 // Route 2: Users
 try {
-  console.log('Ì≥Å 2/8 Chargement src/routes/users.js...');
+  console.log('üìÅ 2/8 Chargement src/routes/users.js...');
   const userRoutes = require('./src/routes/users');
   app.use('/api/users', userRoutes);
   console.log('‚úÖ 2/8 Routes USERS charg√©es avec succ√®s');
 } catch (error) {
   console.error('‚ùå 2/8 ERREUR routes USERS:', error.message);
   console.error('Stack:', error.stack.split('\n').slice(0, 5).join('\n'));
-  console.log('Ìªë ROUTE PROBL√âMATIQUE IDENTIFI√âE: USERS');
+  console.log('üõë ROUTE PROBL√âMATIQUE IDENTIFI√âE: USERS');
   process.exit(1);
 }
 
 // Route 3: Restaurants
 try {
-  console.log('Ì≥Å 3/8 Chargement src/routes/restaurants.js...');
+  console.log('üìÅ 3/8 Chargement src/routes/restaurants.js...');
   const restaurantRoutes = require('./src/routes/restaurants');
   app.use('/api/restaurants', restaurantRoutes);
   console.log('‚úÖ 3/8 Routes RESTAURANTS charg√©es avec succ√®s');
 } catch (error) {
   console.error('‚ùå 3/8 ERREUR routes RESTAURANTS:', error.message);
   console.error('Stack:', error.stack.split('\n').slice(0, 5).join('\n'));
-  console.log('Ìªë ROUTE PROBL√âMATIQUE IDENTIFI√âE: RESTAURANTS');
+  console.log('üõë ROUTE PROBL√âMATIQUE IDENTIFI√âE: RESTAURANTS');
   process.exit(1);
 }
 
 // Route 4: FloorPlans
 try {
-  console.log('Ì≥Å 4/8 Chargement src/routes/floorplans.js...');
+  console.log('üìÅ 4/8 Chargement src/routes/floorplans.js...');
   const floorPlanRoutes = require('./src/routes/floorplans');
   app.use('/api/floorplans', floorPlanRoutes);
   console.log('‚úÖ 4/8 Routes FLOORPLANS charg√©es avec succ√®s');
 } catch (error) {
   console.error('‚ùå 4/8 ERREUR routes FLOORPLANS:', error.message);
   console.error('Stack:', error.stack.split('\n').slice(0, 5).join('\n'));
-  console.log('Ìªë ROUTE PROBL√âMATIQUE IDENTIFI√âE: FLOORPLANS');
+  console.log('üõë ROUTE PROBL√âMATIQUE IDENTIFI√âE: FLOORPLANS');
   process.exit(1);
 }
 
 // Route 5: Menu
 try {
-  console.log('Ì≥Å 5/8 Chargement src/routes/menu.js...');
+  console.log('üìÅ 5/8 Chargement src/routes/menu.js...');
   const menuRoutes = require('./src/routes/menu');
   app.use('/api/menu', menuRoutes);
   console.log('‚úÖ 5/8 Routes MENU charg√©es avec succ√®s');
 } catch (error) {
   console.error('‚ùå 5/8 ERREUR routes MENU:', error.message);
   console.error('Stack:', error.stack.split('\n').slice(0, 5).join('\n'));
-  console.log('Ìªë ROUTE PROBL√âMATIQUE IDENTIFI√âE: MENU');
+  console.log('üõë ROUTE PROBL√âMATIQUE IDENTIFI√âE: MENU');
   process.exit(1);
 }
 
 // Route 6: Orders (suspecte)
 try {
-  console.log('Ì≥Å 6/8 Chargement src/routes/orders.js...');
+  console.log('üìÅ 6/8 Chargement src/routes/orders.js...');
   const orderRoutes = require('./src/routes/orders');
   app.use('/api/orders', orderRoutes);
   console.log('‚úÖ 6/8 Routes ORDERS charg√©es avec succ√®s');
 } catch (error) {
   console.error('‚ùå 6/8 ERREUR routes ORDERS:', error.message);
   console.error('Stack:', error.stack.split('\n').slice(0, 5).join('\n'));
-  console.log('Ìªë ROUTE PROBL√âMATIQUE IDENTIFI√âE: ORDERS');
+  console.log('üõë ROUTE PROBL√âMATIQUE IDENTIFI√âE: ORDERS');
   process.exit(1);
 }
 
 // Route 7: Reservations (mode debug temporaire vu pr√©c√©demment)
 try {
-  console.log('Ì≥Å 7/8 Chargement src/routes/reservations.js...');
+  console.log('üìÅ 7/8 Chargement src/routes/reservations.js...');
   const reservationRoutes = require('./src/routes/reservations');
   app.use('/api/reservations', reservationRoutes);
   console.log('‚úÖ 7/8 Routes RESERVATIONS charg√©es avec succ√®s');
 } catch (error) {
   console.error('‚ùå 7/8 ERREUR routes RESERVATIONS:', error.message);
   console.error('Stack:', error.stack.split('\n').slice(0, 5).join('\n'));
-  console.log('Ìªë ROUTE PROBL√âMATIQUE IDENTIFI√âE: RESERVATIONS');
+  console.log('üõë ROUTE PROBL√âMATIQUE IDENTIFI√âE: RESERVATIONS');
   process.exit(1);
 }
 
 // Route 8: Notifications
 try {
-  console.log('Ì≥Å 8/8 Chargement src/routes/notifications.js...');
+  console.log('üìÅ 8/8 Chargement src/routes/notifications.js...');
   const notificationRoutes = require('./src/routes/notifications');
   app.use('/api/notifications', notificationRoutes);
   console.log('‚úÖ 8/8 Routes NOTIFICATIONS charg√©es avec succ√®s');
 } catch (error) {
   console.error('‚ùå 8/8 ERREUR routes NOTIFICATIONS:', error.message);
   console.error('Stack:', error.stack.split('\n').slice(0, 5).join('\n'));
-  console.log('Ìªë ROUTE PROBL√âMATIQUE IDENTIFI√âE: NOTIFICATIONS');
+  console.log('üõë ROUTE PROBL√âMATIQUE IDENTIFI√âE: NOTIFICATIONS');
   process.exit(1);
 }
 
-console.log('\nÌæâ TOUTES LES ROUTES CHARG√âES AVEC SUCC√àS !');
+console.log('\nüéâ TOUTES LES ROUTES CHARG√âES AVEC SUCC√àS !');
 console.log('‚ú® L\'application est compl√®tement fonctionnelle');
+
+// Middleware de gestion d'erreur global
+app.use((error, req, res, next) => {
+  console.error('üö® ERREUR GLOBALE:', error.message);
+  console.error('Stack:', error.stack);
+  
+  res.status(500).json({
+    success: false,
+    message: 'Erreur serveur interne',
+    error: process.env.NODE_ENV === 'development' ? error.message : undefined
+  });
+});
+
+// Route 404
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} non trouv√©e`
+  });
+});
+
+console.log('‚úÖ Middlewares de fin install√©s');
 
 module.exports = app;

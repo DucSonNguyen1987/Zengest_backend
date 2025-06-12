@@ -1,10 +1,6 @@
-/**
- * CORRECTION: src/models/User.js
- * Rôles en minuscules et restaurantId optionnel
- */
-
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { USER_ROLES } = require('../utils/constants');
 
 const userSchema = new mongoose.Schema({
   firstName: {
@@ -13,382 +9,320 @@ const userSchema = new mongoose.Schema({
     trim: true,
     maxlength: [50, 'Le prénom ne peut pas dépasser 50 caractères']
   },
-
+  
   lastName: {
     type: String,
     required: [true, 'Le nom est requis'],
     trim: true,
     maxlength: [50, 'Le nom ne peut pas dépasser 50 caractères']
   },
-
+  
   email: {
     type: String,
     required: [true, 'L\'email est requis'],
     unique: true,
-    trim: true,
     lowercase: true,
+    trim: true,
     match: [
       /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-      'Veuillez entrer un email valide'
+      'Email invalide'
     ]
   },
-
+  
   password: {
     type: String,
     required: [true, 'Le mot de passe est requis'],
     minlength: [6, 'Le mot de passe doit contenir au moins 6 caractères'],
-    select: false // Ne pas inclure le mot de passe dans les requêtes par défaut
+    select: false // Par défaut, ne pas inclure le mot de passe dans les requêtes
   },
-
-  role: {
-    type: String,
-    enum: {
-      values: [
-        'admin',        // Administrateur système
-        'owner',        // Propriétaire de restaurant
-        'manager',      // Manager de restaurant
-        'staff_floor',  // Personnel de salle
-        'staff_bar',    // Personnel de bar
-        'staff_kitchen',// Personnel de cuisine
-        'guest'         // Invité (lecture seule)
-      ],
-      message: 'Rôle invalide: {VALUE}. Rôles autorisés: admin, owner, manager, staff_floor, staff_bar, staff_kitchen, guest'
-    },
-    required: [true, 'Le rôle est requis'],
-    default: 'guest'
-  },
-
+  
   phone: {
     type: String,
     trim: true,
-    match: [
-      /^[\+]?[1-9][\d]{0,15}$/,
-      'Veuillez entrer un numéro de téléphone valide'
-    ]
+    match: [/^[\d\s+.\-()]+$/, 'Numéro de téléphone invalide']  },
+  
+  role: {
+  type: String,
+  required: [true, 'Le rôle est requis'],
+  enum: {
+    values: Object.values(USER_ROLES),
+    message: 'Rôle invalide: {VALUE}. Rôles autorisés: ' + Object.values(USER_ROLES).join(', ')
   },
-
-  // CORRECTION: RestaurantId OPTIONNEL
+  default: USER_ROLES.GUEST
+},
+  
+  // RestaurantId OPTIONNEL pour les admins système
   restaurantId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Restaurant',
-    required: false, // CHANGÉ: était true, maintenant false pour flexibilité
-    default: null,
+    required: function() {
+      // Requis seulement si ce n'est pas un admin système
+      return this.role !== USER_ROLES.ADMIN;
+    },
     validate: {
-      validator: function (v) {
-        // Si fourni, doit être un ObjectId valide
-        return v === null || v === undefined || mongoose.Types.ObjectId.isValid(v);
+      validator: function(value) {
+        // Admin peut ne pas avoir de restaurant
+        if (this.role === USER_ROLES.ADMIN) {
+          return true;
+        }
+        // Autres rôles doivent avoir un restaurant
+        return value != null;
       },
-      message: 'RestaurantId doit être un ObjectId valide'
+      message: 'Restaurant requis pour ce rôle'
     }
   },
-
+  
+  // Statut du compte
   isActive: {
     type: Boolean,
     default: true
   },
-
+  
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  
+  // Préférences utilisateur
   preferences: {
     language: {
       type: String,
-      enum: ['fr', 'en', 'es'],
+      enum: ['fr', 'en'],
       default: 'fr'
     },
     notifications: {
       email: { type: Boolean, default: true },
-      sms: { type: Boolean, default: false },
-      push: { type: Boolean, default: true }
+      push: { type: Boolean, default: true },
+      sms: { type: Boolean, default: false }
     },
-    dashboard: {
-      defaultView: {
-        type: String,
-        enum: ['orders', 'reservations', 'menu', 'statistics'],
-        default: 'orders'
-      }
+    theme: {
+      type: String,
+      enum: ['light', 'dark', 'auto'],
+      default: 'light'
     }
   },
-
-  permissions: [{
-    type: String,
-    enum: [
-      // Permissions restaurants
-      'restaurants:read', 'restaurants:write', 'restaurants:delete',
-      // Permissions utilisateurs
-      'users:read', 'users:write', 'users:delete',
-      // Permissions commandes
-      'orders:read', 'orders:write', 'orders:delete',
-      // Permissions menu
-      'menu:read', 'menu:write', 'menu:delete',
-      // Permissions réservations
-      'reservations:read', 'reservations:write', 'reservations:delete',
-      // Permissions plans de salle
-      'floorplans:read', 'floorplans:write', 'floorplans:delete',
-      // Permissions statistiques
-      'statistics:read',
-      // Permissions notifications
-      'notifications:send',
-      // Permissions système
-      'system:admin'
-    ]
-  }],
-
-  timestamps: {
-    createdAt: {
-      type: Date,
-      default: Date.now
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now
-    },
-    lastLogin: {
-      type: Date
-    },
-    lastActivity: {
-      type: Date
-    }
-  },
-
+  
+  // Métadonnées de sécurité
   security: {
-    failedLoginAttempts: {
-      type: Number,
-      default: 0,
-      max: [10, 'Trop de tentatives de connexion échouées']
+    lastLogin: Date,
+    loginAttempts: { type: Number, default: 0 },
+    lockedUntil: Date,
+    passwordChangedAt: Date,
+    twoFactorEnabled: { type: Boolean, default: false },
+    twoFactorSecret: { type: String, select: false }
+  },
+  
+  // Données de profil étendues
+  profile: {
+    avatar: String,
+    bio: String,
+    dateOfBirth: Date,
+    address: {
+      street: String,
+      city: String,
+      postalCode: String,
+      country: { type: String, default: 'France' }
     },
-    lockUntil: Date,
-    twoFactorEnabled: {
-      type: Boolean,
-      default: false
-    },
-    lastPasswordChange: {
-      type: Date,
-      default: Date.now
+    emergencyContact: {
+      name: String,
+      phone: String,
+      relationship: String
     }
   }
 }, {
-  timestamps: false, // Utiliser notre propre système de timestamps
-  toJSON: {
+  timestamps: true,
+  toJSON: { 
     virtuals: true,
-    transform: function (doc, ret) {
-      if (!ret) return ret; 
-      if (!ret.restaurantId) return ret;
+    transform: function(doc, ret) {
       delete ret.password;
-      delete ret.security.lockUntil;
-      delete ret.__v;
+      delete ret.security?.twoFactorSecret;
       return ret;
     }
   },
-  toObject: { virtuals: true }
+  toObject: { virtuals: true },
+  lastLogin: {
+  type: Date,
+  default: null
+}
 });
 
-// === INDEXES POUR PERFORMANCE ===
-userSchema.index({ email: 1 }, { unique: true });
-userSchema.index({ restaurantId: 1 });
-userSchema.index({ role: 1 });
-userSchema.index({ isActive: 1 });
-userSchema.index({ 'timestamps.lastLogin': -1 });
+// === INDEX POUR PERFORMANCE ===
+// userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ restaurantId: 1, role: 1 });
+userSchema.index({ role: 1, isActive: 1 });
 
-// === VIRTUELS ===
-userSchema.virtual('fullName').get(function () {
+// === PROPRIÉTÉS VIRTUELLES ===
+userSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
 
-userSchema.virtual('isLocked').get(function () {
-  return !!(this.security.lockUntil && this.security.lockUntil > Date.now());
-});
-
-userSchema.virtual('restaurantName').get(function () {
-  return this.restaurantId?.name || null;
+userSchema.virtual('isLocked').get(function() {
+  return this.security?.lockedUntil && this.security.lockedUntil > Date.now();
 });
 
 // === MIDDLEWARE PRE-SAVE ===
-userSchema.pre('save', async function (next) {
-  // Hash du mot de passe si modifié
-  if (this.isModified('password')) {
-    try {
-      const saltRounds = 12;
-      this.password = await bcrypt.hash(this.password, saltRounds);
-      this.security.lastPasswordChange = new Date();
-    } catch (error) {
-      return next(error);
+userSchema.pre('save', async function(next) {
+  try {
+    // Hasher le mot de passe si modifié
+    if (this.isModified('password')) {
+      const salt = await bcrypt.genSalt(12);
+      this.password = await bcrypt.hash(this.password, salt);
+      this.security.passwordChangedAt = new Date();
     }
+    
+    // Normaliser l'email
+    if (this.isModified('email')) {
+      this.email = this.email.toLowerCase().trim();
+    }
+    
+    // Validation conditionnelle du restaurant pour les rôles
+    if (this.isModified('role') || this.isModified('restaurantId')) {
+      // Admin peut ne pas avoir de restaurant
+      if (this.role === USER_ROLES.ADMIN) {
+        // Optionnel pour admin
+      } else if (!this.restaurantId) {
+        throw new Error(`Restaurant requis pour le rôle ${this.role}`);
+      }
+    }
+    
+    next();
+  } catch (error) {
+    next(error);
   }
-
-  // Mise à jour du timestamp
-  this.timestamps.updatedAt = new Date();
-
-  // Auto-attribution des permissions selon le rôle
-  if (this.isModified('role')) {
-    this.permissions = this.getPermissionsByRole(this.role);
-  }
-
-  next();
 });
 
 // === MÉTHODES D'INSTANCE ===
 
-// Comparer mot de passe
-userSchema.methods.comparePassword = async function (candidatePassword) {
+/**
+ * Comparer le mot de passe fourni avec le hash stocké
+ */
+userSchema.methods.comparePassword = async function(password) {
   try {
-    return await bcrypt.compare(candidatePassword, this.password);
+    return await bcrypt.compare(password, this.password);
   } catch (error) {
-    throw new Error('Erreur lors de la comparaison du mot de passe');
+    throw new Error('Erreur lors de la vérification du mot de passe');
   }
 };
 
-// Obtenir permissions par rôle
-userSchema.methods.getPermissionsByRole = function (role) {
+/**
+ * Incrémenter les tentatives de connexion
+ */
+userSchema.methods.incrementLoginAttempts = function() {
+  // Si le compte était verrouillé et que la période est expirée
+  if (this.security.lockedUntil && this.security.lockedUntil < Date.now()) {
+    return this.updateOne({
+      $unset: { 'security.lockedUntil': 1 },
+      $set: { 'security.loginAttempts': 1 }
+    });
+  }
+  
+  const updates = { $inc: { 'security.loginAttempts': 1 } };
+  
+  // Verrouiller le compte après 5 tentatives
+  if (this.security.loginAttempts + 1 >= 5 && !this.isLocked) {
+    updates.$set = { 'security.lockedUntil': Date.now() + 2 * 60 * 60 * 1000 }; // 2 heures
+  }
+  
+  return this.updateOne(updates);
+};
+
+/**
+ * Réinitialiser les tentatives de connexion
+ */
+userSchema.methods.resetLoginAttempts = function() {
+  return this.updateOne({
+    $unset: { 
+      'security.lockedUntil': 1,
+      'security.loginAttempts': 1 
+    },
+    $set: { 'security.lastLogin': new Date() }
+  });
+};
+
+/**
+ * Vérifier si l'utilisateur a un rôle spécifique
+ */
+userSchema.methods.hasRole = function(role) {
+  if (Array.isArray(role)) {
+    return role.includes(this.role);
+  }
+  return this.role === role;
+};
+
+/**
+ * Vérifier si l'utilisateur a une permission
+ */
+userSchema.methods.hasPermission = function(permission) {
   const rolePermissions = {
-    admin: [
-      'restaurants:read', 'restaurants:write', 'restaurants:delete',
-      'users:read', 'users:write', 'users:delete',
-      'orders:read', 'orders:write', 'orders:delete',
-      'menu:read', 'menu:write', 'menu:delete',
-      'reservations:read', 'reservations:write', 'reservations:delete',
-      'floorplans:read', 'floorplans:write', 'floorplans:delete',
-      'statistics:read',
-      'notifications:send',
-      'system:admin'
+    [USER_ROLES.ADMIN]: ['*'],
+    [USER_ROLES.OWNER]: [
+      'manage_restaurant', 'manage_users', 'manage_orders', 
+      'manage_tables', 'view_analytics', 'manage_menu'
     ],
-    owner: [
-      'restaurants:read', 'restaurants:write',
-      'users:read', 'users:write',
-      'orders:read', 'orders:write',
-      'menu:read', 'menu:write',
-      'reservations:read', 'reservations:write',
-      'floorplans:read', 'floorplans:write',
-      'statistics:read',
-      'notifications:send'
+    [USER_ROLES.MANAGER]: [
+      'manage_orders', 'manage_tables', 'view_analytics', 
+      'manage_daily_specials'
     ],
-    manager: [
-      'users:read',
-      'orders:read', 'orders:write',
-      'menu:read', 'menu:write',
-      'reservations:read', 'reservations:write',
-      'floorplans:read', 'floorplans:write',
-      'statistics:read'
+    [USER_ROLES.STAFF]: [
+      'manage_orders', 'manage_tables', 'view_kitchen'
     ],
-    staff_floor: [
-      'orders:read', 'orders:write',
-      'menu:read',
-      'reservations:read', 'reservations:write',
-      'floorplans:read'
-    ],
-    staff_bar: [
-      'orders:read', 'orders:write',
-      'menu:read',
-      'floorplans:read'
-    ],
-    staff_kitchen: [
-      'orders:read', 'orders:write',
-      'menu:read'
-    ],
-    guest: [
-      'menu:read',
-      'floorplans:read'
-    ]
+    'staff_floor': ['manage_orders', 'manage_tables'],
+    'staff_kitchen': ['view_kitchen', 'update_order_status']
   };
-
-  return rolePermissions[role] || [];
+  
+  const permissions = rolePermissions[this.role] || [];
+  return permissions.includes('*') || permissions.includes(permission);
 };
 
-// Vérifier permission
-userSchema.methods.hasPermission = function (permission) {
-  return this.permissions.includes(permission);
-};
-
-// Mettre à jour activité
-userSchema.methods.updateActivity = function () {
-  this.timestamps.lastActivity = new Date();
-  return this.save();
-};
-
-// Incrémenter tentatives échouées
-userSchema.methods.incFailedLoginAttempts = function () {
-  this.security.failedLoginAttempts += 1;
-
-  // Verrouiller après 5 tentatives échouées
-  if (this.security.failedLoginAttempts >= 5) {
-    this.security.lockUntil = Date.now() + (15 * 60 * 1000); // 15 minutes
-  }
-
-  return this.save();
-};
-
-// Réinitialiser tentatives échouées
-userSchema.methods.resetFailedLoginAttempts = function () {
-  this.security.failedLoginAttempts = 0;
-  this.security.lockUntil = undefined;
-  this.timestamps.lastLogin = new Date();
-  return this.save();
+/**
+ * Méthode pour retourner les données publiques
+ */
+userSchema.methods.toPublicJSON = function() {
+  return {
+    _id: this._id,
+    firstName: this.firstName,
+    lastName: this.lastName,
+    fullName: this.fullName,
+    email: this.email,
+    phone: this.phone,
+    role: this.role,
+    restaurantId: this.restaurantId,
+    isActive: this.isActive,
+    isEmailVerified: this.isEmailVerified,
+    preferences: this.preferences,
+    profile: {
+      avatar: this.profile?.avatar,
+      bio: this.profile?.bio
+    },
+    createdAt: this.createdAt,
+    updatedAt: this.updatedAt
+  };
 };
 
 // === MÉTHODES STATIQUES ===
 
-// Trouver par email avec mot de passe
-userSchema.statics.findByEmailWithPassword = function (email) {
-  return this.findOne({ email }).select('+password');
+/**
+ * Trouver un utilisateur par email avec gestion des erreurs
+ */
+userSchema.statics.findByEmail = function(email) {
+  return this.findOne({ 
+    email: email.toLowerCase().trim(),
+    isActive: true 
+  }).select('+password +security');
 };
 
-// Trouver utilisateurs actifs par restaurant
-userSchema.statics.findActiveByRestaurant = function (restaurantId) {
-  return this.find({
-    restaurantId,
-    isActive: true
-  }).populate('restaurantId', 'name');
+/**
+ * Créer un utilisateur avec validation étendue
+ */
+userSchema.statics.createUser = async function(userData) {
+  const user = new this(userData);
+  
+  // Validation supplémentaire
+  if (user.role !== USER_ROLES.ADMIN && !user.restaurantId) {
+    throw new Error(`Restaurant requis pour le rôle ${user.role}`);
+  }
+  
+  return await user.save();
 };
 
-// Statistiques utilisateurs
-userSchema.statics.getStatistics = function () {
-  return this.aggregate([
-    {
-      $group: {
-        _id: '$role',
-        count: { $sum: 1 },
-        active: {
-          $sum: {
-            $cond: [{ $eq: ['$isActive', true] }, 1, 0]
-          }
-        }
-      }
-    }
-  ]);
-};
-
-// === MIDDLEWARE POST ===
-userSchema.post('save', function (doc) {
-  console.log(`Utilisateur ${doc.email} sauvegardé (${doc.role})`);
-});
-
-userSchema.post('remove', function (doc) {
-  console.log(`Utilisateur ${doc.email} supprimé`);
-});
-
-// === VALIDATION PERSONNALISÉE ===
-
-// Validation email unique (hors current document)
-userSchema.path('email').validate(async function (value) {
-  if (!this.isModified('email')) return true;
-
-  const count = await this.constructor.countDocuments({
-    email: value,
-    _id: { $ne: this._id }
-  });
-
-  return count === 0;
-}, 'Cet email est déjà utilisé');
-
-// Validation restaurant pour rôles spécifiques
-userSchema.path('restaurantId').validate(function (value) {
-  // Admin peut être sans restaurant
-  if (this.role === 'admin') return true;
-
-  // Owner peut créer un restaurant après
-  if (this.role === 'owner') return true;
-
-  // Autres rôles peuvent temporairement être sans restaurant
-  return true;
-}, 'Restaurant requis pour ce rôle');
-
-const User = mongoose.model('User', userSchema);
-
-module.exports = User;
+module.exports = mongoose.model('User', userSchema);

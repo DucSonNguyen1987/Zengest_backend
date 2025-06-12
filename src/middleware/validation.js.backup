@@ -1,0 +1,648 @@
+const { validationResult, body, param, query } = require('express-validator');
+const { sendErrorResponse } = require('../utils/responseHelper');
+const logger = require('../utils/logger');
+
+/**
+ * Middleware pour traiter les résultats de validation
+ */
+const validateRequest = (req, res, next) => {
+  const errors = validationResult(req);
+  
+  if (!errors.isEmpty()) {
+    const formattedErrors = errors.array().map(error => ({
+      field: error.param,
+      message: error.msg,
+      value: error.value,
+      location: error.location
+    }));
+
+    logger.warn('Erreurs de validation:', {
+      endpoint: req.originalUrl,
+      method: req.method,
+      errors: formattedErrors,
+      body: req.body,
+      userId: req.user?.id
+    });
+
+    return sendErrorResponse(res, 'Données de validation invalides', 400, formattedErrors);
+  }
+  
+  next();
+};
+
+/**
+ * Validateurs pour les ID MongoDB
+ */
+const validateMongoId = (field = 'id') => [
+  param(field)
+    .isMongoId()
+    .withMessage(`${field} doit être un identifiant MongoDB valide`)
+];
+
+const validateOptionalMongoId = (field = 'id') => [
+  param(field)
+    .optional()
+    .isMongoId()
+    .withMessage(`${field} doit être un identifiant MongoDB valide`)
+];
+
+/**
+ * Validateurs pour les données utilisateur
+ */
+const validateUserRegistration = [
+  body('firstName')
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .withMessage('Le prénom doit contenir entre 2 et 50 caractères')
+    .matches(/^[a-zA-ZÀ-ÿ\s\-']+$/)
+    .withMessage('Le prénom contient des caractères invalides'),
+
+  body('lastName')
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .withMessage('Le nom doit contenir entre 2 et 50 caractères')
+    .matches(/^[a-zA-ZÀ-ÿ\s\-']+$/)
+    .withMessage('Le nom contient des caractères invalides'),
+
+  body('email')
+    .isEmail()
+    .withMessage('Format d\'email invalide')
+    .normalizeEmail()
+    .isLength({ max: 254 })
+    .withMessage('Email trop long'),
+
+  body('password')
+    .isLength({ min: 8, max: 128 })
+    .withMessage('Le mot de passe doit contenir entre 8 et 128 caractères')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+    .withMessage('Le mot de passe doit contenir au moins une minuscule, une majuscule, un chiffre et un caractère spécial'),
+
+  body('role')
+    .isIn(['admin', 'owner', 'manager', 'staff'])
+    .withMessage('Rôle invalide'),
+
+  body('phone')
+    .optional()
+    .matches(/^(?:(?:\+|00)33|0)\s*[1-9](?:[\s.-]*\d{2}){4}$/)
+    .withMessage('Numéro de téléphone français invalide')
+];
+
+const validateUserUpdate = [
+  body('firstName')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .withMessage('Le prénom doit contenir entre 2 et 50 caractères')
+    .matches(/^[a-zA-ZÀ-ÿ\s\-']+$/)
+    .withMessage('Le prénom contient des caractères invalides'),
+
+  body('lastName')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .withMessage('Le nom doit contenir entre 2 et 50 caractères')
+    .matches(/^[a-zA-ZÀ-ÿ\s\-']+$/)
+    .withMessage('Le nom contient des caractères invalides'),
+
+  body('email')
+    .optional()
+    .isEmail()
+    .withMessage('Format d\'email invalide')
+    .normalizeEmail(),
+
+  body('phone')
+    .optional()
+    .matches(/^(?:(?:\+|00)33|0)\s*[1-9](?:[\s.-]*\d{2}){4}$/)
+    .withMessage('Numéro de téléphone français invalide'),
+
+  body('role')
+    .optional()
+    .isIn(['admin', 'owner', 'manager', 'staff'])
+    .withMessage('Rôle invalide')
+];
+
+const validateLogin = [
+  body('email')
+    .isEmail()
+    .withMessage('Format d\'email invalide')
+    .normalizeEmail(),
+
+  body('password')
+    .notEmpty()
+    .withMessage('Mot de passe requis')
+    .isLength({ min: 1, max: 128 })
+    .withMessage('Mot de passe invalide')
+];
+
+const validatePasswordChange = [
+  body('currentPassword')
+    .notEmpty()
+    .withMessage('Mot de passe actuel requis'),
+
+  body('newPassword')
+    .isLength({ min: 8, max: 128 })
+    .withMessage('Le nouveau mot de passe doit contenir entre 8 et 128 caractères')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+    .withMessage('Le nouveau mot de passe doit contenir au moins une minuscule, une majuscule, un chiffre et un caractère spécial'),
+
+  body('confirmPassword')
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error('Les mots de passe ne correspondent pas');
+      }
+      return true;
+    })
+];
+
+/**
+ * Validateurs pour les plats du jour
+ */
+const validateDailySpecial = [
+  body('name')
+    .trim()
+    .isLength({ min: 3, max: 100 })
+    .withMessage('Le nom doit contenir entre 3 et 100 caractères')
+    .matches(/^[a-zA-ZÀ-ÿ0-9\s\-'().&,]+$/)
+    .withMessage('Le nom contient des caractères non autorisés'),
+
+  body('description')
+    .trim()
+    .isLength({ min: 10, max: 500 })
+    .withMessage('La description doit contenir entre 10 et 500 caractères'),
+
+  body('price')
+    .isFloat({ min: 0, max: 500 })
+    .withMessage('Le prix doit être entre 0 et 500€'),
+
+  body('category')
+    .isIn(['appetizers', 'soups', 'salads', 'mains', 'fish', 'meat', 'vegetarian', 'desserts', 'beverages', 'wines', 'cocktails'])
+    .withMessage('Catégorie invalide'),
+
+  body('availableDate')
+    .isISO8601()
+    .withMessage('Date de disponibilité invalide')
+    .custom((value) => {
+      const date = new Date(value);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (date < today) {
+        throw new Error('La date de disponibilité ne peut pas être dans le passé');
+      }
+      return true;
+    }),
+
+  body('expirationDate')
+    .optional()
+    .isISO8601()
+    .withMessage('Date d\'expiration invalide'),
+
+  body('preparationTime')
+    .optional()
+    .isInt({ min: 5, max: 180 })
+    .withMessage('Le temps de préparation doit être entre 5 et 180 minutes'),
+
+  body('chef')
+    .optional()
+    .trim()
+    .isLength({ max: 50 })
+    .withMessage('Le nom du chef ne peut pas dépasser 50 caractères'),
+
+  body('allergens')
+    .optional()
+    .isArray()
+    .withMessage('Les allergènes doivent être un tableau'),
+
+  body('allergens.*')
+    .optional()
+    .isIn([
+      'Gluten', 'Crustacés', 'Œufs', 'Poissons', 'Arachides', 'Soja',
+      'Lait', 'Fruits à coques', 'Céleri', 'Moutarde', 'Graines de sésame',
+      'Anhydride sulfureux et sulfites', 'Lupin', 'Mollusques'
+    ])
+    .withMessage('Allergène invalide'),
+
+  body('isVegetarian')
+    .optional()
+    .isBoolean()
+    .withMessage('isVegetarian doit être un booléen'),
+
+  body('isVegan')
+    .optional()
+    .isBoolean()
+    .withMessage('isVegan doit être un booléen'),
+
+  body('isGlutenFree')
+    .optional()
+    .isBoolean()
+    .withMessage('isGlutenFree doit être un booléen'),
+
+  body('maxQuantity')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('La quantité maximum doit être un entier positif'),
+
+  body('tags')
+    .optional()
+    .isArray()
+    .withMessage('Les tags doivent être un tableau'),
+
+  body('tags.*')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 20 })
+    .withMessage('Chaque tag doit contenir entre 1 et 20 caractères'),
+
+  body('internalNotes')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Les notes internes ne peuvent pas dépasser 500 caractères')
+];
+
+/**
+ * Validateurs pour les réservations
+ */
+const validateReservation = [
+  body('customerName')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Le nom doit contenir entre 2 et 100 caractères')
+    .matches(/^[a-zA-ZÀ-ÿ\s\-']+$/)
+    .withMessage('Le nom contient des caractères invalides'),
+
+  body('customerEmail')
+    .isEmail()
+    .withMessage('Format d\'email invalide')
+    .normalizeEmail(),
+
+  body('customerPhone')
+    .matches(/^(?:(?:\+|00)33|0)\s*[1-9](?:[\s.-]*\d{2}){4}$/)
+    .withMessage('Numéro de téléphone français invalide'),
+
+  body('date')
+    .isISO8601()
+    .withMessage('Date invalide')
+    .custom((value) => {
+      const date = new Date(value);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (date < today) {
+        throw new Error('La date de réservation ne peut pas être dans le passé');
+      }
+      
+      // Limiter à 3 mois à l'avance
+      const maxDate = new Date();
+      maxDate.setMonth(maxDate.getMonth() + 3);
+      
+      if (date > maxDate) {
+        throw new Error('Les réservations ne peuvent pas être faites plus de 3 mois à l\'avance');
+      }
+      
+      return true;
+    }),
+
+  body('time')
+    .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .withMessage('Format d\'heure invalide (HH:mm)'),
+
+  body('partySize')
+    .isInt({ min: 1, max: 20 })
+    .withMessage('Le nombre de personnes doit être entre 1 et 20'),
+
+  body('specialRequests')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Les demandes spéciales ne peuvent pas dépasser 500 caractères')
+];
+
+/**
+ * Validateurs pour les restaurants
+ */
+const validateRestaurant = [
+  body('name')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Le nom doit contenir entre 2 et 100 caractères'),
+
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage('La description ne peut pas dépasser 1000 caractères'),
+
+  body('address.street')
+    .trim()
+    .notEmpty()
+    .withMessage('L\'adresse est requise'),
+
+  body('address.city')
+    .trim()
+    .notEmpty()
+    .withMessage('La ville est requise'),
+
+  body('address.postalCode')
+    .matches(/^\d{5}$/)
+    .withMessage('Le code postal doit contenir 5 chiffres'),
+
+  body('phone')
+    .matches(/^(?:(?:\+|00)33|0)\s*[1-9](?:[\s.-]*\d{2}){4}$/)
+    .withMessage('Numéro de téléphone français invalide'),
+
+  body('email')
+    .isEmail()
+    .withMessage('Format d\'email invalide')
+    .normalizeEmail(),
+
+  body('website')
+    .optional()
+    .isURL()
+    .withMessage('URL du site web invalide'),
+
+  body('capacity')
+    .isInt({ min: 1, max: 1000 })
+    .withMessage('La capacité doit être entre 1 et 1000 personnes')
+];
+
+/**
+ * Validateurs pour les requêtes de recherche
+ */
+const validateSearchQuery = [
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Le numéro de page doit être un entier positif'),
+
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('La limite doit être entre 1 et 100'),
+
+  query('search')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('La recherche doit contenir entre 2 et 100 caractères')
+    .escape(), // Échapper les caractères HTML
+
+  query('sortBy')
+    .optional()
+    .matches(/^[a-zA-Z_][a-zA-Z0-9_.]*$/)
+    .withMessage('Champ de tri invalide'),
+
+  query('sortOrder')
+    .optional()
+    .isIn(['asc', 'desc'])
+    .withMessage('Ordre de tri invalide (asc ou desc)'),
+
+  query('startDate')
+    .optional()
+    .isISO8601()
+    .withMessage('Date de début invalide'),
+
+  query('endDate')
+    .optional()
+    .isISO8601()
+    .withMessage('Date de fin invalide')
+    .custom((value, { req }) => {
+      if (value && req.query.startDate) {
+        const start = new Date(req.query.startDate);
+        const end = new Date(value);
+        if (end <= start) {
+          throw new Error('La date de fin doit être postérieure à la date de début');
+        }
+      }
+      return true;
+    })
+];
+
+/**
+ * Validateurs pour le menu
+ */
+const validateMenuItem = [
+  body('name')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Le nom doit contenir entre 2 et 100 caractères'),
+
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('La description ne peut pas dépasser 500 caractères'),
+
+  body('price')
+    .isFloat({ min: 0, max: 1000 })
+    .withMessage('Le prix doit être entre 0 et 1000€'),
+
+  body('category')
+    .isIn(['appetizers', 'soups', 'salads', 'mains', 'fish', 'meat', 'vegetarian', 'desserts', 'beverages', 'wines', 'cocktails'])
+    .withMessage('Catégorie invalide'),
+
+  body('isAvailable')
+    .optional()
+    .isBoolean()
+    .withMessage('isAvailable doit être un booléen'),
+
+  body('preparationTime')
+    .optional()
+    .isInt({ min: 1, max: 180 })
+    .withMessage('Le temps de préparation doit être entre 1 et 180 minutes')
+];
+
+/**
+ * Validateurs pour les commandes
+ */
+const validateOrder = [
+  body('table.floorPlan')
+    .isMongoId()
+    .withMessage('ID du plan de salle invalide'),
+
+  body('table.number')
+    .isInt({ min: 1 })
+    .withMessage('Numéro de table invalide'),
+
+  body('items')
+    .isArray({ min: 1 })
+    .withMessage('La commande doit contenir au moins un article'),
+
+  body('items.*.menuItem')
+    .isMongoId()
+    .withMessage('ID de l\'article du menu invalide'),
+
+  body('items.*.quantity')
+    .isInt({ min: 1, max: 50 })
+    .withMessage('La quantité doit être entre 1 et 50'),
+
+  body('items.*.specialInstructions')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Les instructions spéciales ne peuvent pas dépasser 200 caractères'),
+
+  body('customerNotes')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Les notes client ne peuvent pas dépasser 500 caractères')
+];
+
+/**
+ * Validateur pour les emails de contact
+ */
+const validateContactMessage = [
+  body('name')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Le nom doit contenir entre 2 et 100 caractères')
+    .matches(/^[a-zA-ZÀ-ÿ\s\-']+$/)
+    .withMessage('Le nom contient des caractères invalides'),
+
+  body('email')
+    .isEmail()
+    .withMessage('Format d\'email invalide')
+    .normalizeEmail(),
+
+  body('phone')
+    .optional()
+    .matches(/^(?:(?:\+|00)33|0)\s*[1-9](?:[\s.-]*\d{2}){4}$/)
+    .withMessage('Numéro de téléphone français invalide'),
+
+  body('subject')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Le sujet ne peut pas dépasser 200 caractères'),
+
+  body('message')
+    .trim()
+    .isLength({ min: 10, max: 1000 })
+    .withMessage('Le message doit contenir entre 10 et 1000 caractères')
+];
+
+/**
+ * Validateur pour les paramètres de pagination
+ */
+const validatePagination = [
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Le numéro de page doit être un entier positif')
+    .toInt(),
+
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('La limite doit être entre 1 et 100')
+    .toInt()
+];
+
+/**
+ * Middleware de sanitisation des données
+ */
+const sanitizeInput = (req, res, next) => {
+  // Supprimer les propriétés sensibles des données d'entrée
+  const sensitiveFields = ['password', '__v', '_id'];
+  
+  const sanitizeObject = (obj) => {
+    if (typeof obj !== 'object' || obj === null) return obj;
+    
+    if (Array.isArray(obj)) {
+      return obj.map(sanitizeObject);
+    }
+    
+    const sanitized = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (!sensitiveFields.includes(key)) {
+        sanitized[key] = sanitizeObject(value);
+      }
+    }
+    return sanitized;
+  };
+
+  // Sanitiser les données d'entrée
+  if (req.body) {
+    req.body = sanitizeObject(req.body);
+  }
+  
+  next();
+};
+
+/**
+ * Middleware pour valider les fichiers uploadés
+ */
+const validateFileUpload = (options = {}) => {
+  const {
+    allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
+    maxSize = 5 * 1024 * 1024, // 5MB
+    required = false
+  } = options;
+
+  return (req, res, next) => {
+    if (!req.file && !req.files) {
+      if (required) {
+        return sendErrorResponse(res, 'Fichier requis', 400);
+      }
+      return next();
+    }
+
+    const files = req.files || [req.file];
+    const errors = [];
+
+    for (const file of files) {
+      if (!file) continue;
+
+      // Vérifier le type MIME
+      if (!allowedTypes.includes(file.mimetype)) {
+        errors.push(`Type de fichier non autorisé: ${file.originalname}`);
+      }
+
+      // Vérifier la taille
+      if (file.size > maxSize) {
+        const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(1);
+        errors.push(`Fichier trop volumineux: ${file.originalname} (max: ${maxSizeMB}MB)`);
+      }
+    }
+
+    if (errors.length > 0) {
+      return sendErrorResponse(res, 'Erreurs de validation des fichiers', 400, errors);
+    }
+
+    next();
+  };
+};
+
+/**
+ * Créer un validateur personnalisé
+ */
+const createCustomValidator = (validationRules) => {
+  return [...validationRules, validateRequest];
+};
+
+module.exports = {
+  // Middleware principal
+  validateRequest,
+  sanitizeInput,
+  validateFileUpload,
+
+  // Validateurs spécifiques
+  validateMongoId,
+  validateOptionalMongoId,
+  validateUserRegistration,
+  validateUserUpdate,
+  validateLogin,
+  validatePasswordChange,
+  validateDailySpecial,
+  validateReservation,
+  validateRestaurant,
+  validateSearchQuery,
+  validateMenuItem,
+  validateOrder,
+  validateContactMessage,
+  validatePagination,
+
+  // Utilitaires
+  createCustomValidator
+};
