@@ -1,6 +1,7 @@
 /**
  * CONTRÔLEUR RÉSERVATIONS
  * Gestion complète des réservations avec formats clients flexibles
+ * ✅ INTÉGRATION BREVO COMPLÈTE
  */
 
 const Reservation = require('../models/Reservation');
@@ -24,17 +25,8 @@ try {
   };
 }
 
-// Import sécurisé des services email
-let emailService;
-try {
-  emailService = require('../services/emailService');
-} catch {
-  // Service email fallback
-  emailService = {
-    sendReservationConfirmation: async () => ({ success: false, message: 'Email non configuré' }),
-    sendReservationCancellation: async () => ({ success: false, message: 'Email non configuré' })
-  };
-}
+// ✅ MODIFICATION : Import direct du service Brevo
+const emailService = require('../services/emailService');
 
 /**
  * Obtenir toutes les réservations avec filtres
@@ -230,6 +222,7 @@ exports.getReservationById = async (req, res) => {
 /**
  * Créer une nouvelle réservation
  * POST /reservations
+ * ✅ AVEC ENVOI EMAIL AUTOMATIQUE BREVO
  */
 exports.createReservation = async (req, res) => {
   try {
@@ -246,7 +239,7 @@ exports.createReservation = async (req, res) => {
       notes = ''
     } = req.body;
 
-    // === CORRECTION: Validation et normalisation client flexible ===
+    // === VALIDATION ET NORMALISATION CLIENT FLEXIBLE ===
     if (!customer || typeof customer !== 'object') {
       return res.status(400).json({
         success: false,
@@ -367,15 +360,38 @@ exports.createReservation = async (req, res) => {
       { path: 'assignedTo', select: 'firstName lastName' }
     ]);
 
+    // ✅ AJOUT : Envoi automatique de l'email de confirmation
+    if (normalizedCustomer.email) {
+      try {
+        console.log('📧 Envoi email de confirmation...');
+        
+        // Appel asynchrone pour ne pas bloquer la réponse
+        setImmediate(async () => {
+          try {
+            await emailService.sendReservationConfirmation(savedReservation, normalizedCustomer);
+            console.log('✅ Email de confirmation envoyé à:', normalizedCustomer.email);
+          } catch (emailError) {
+            console.error('❌ Erreur envoi email confirmation:', emailError.message);
+          }
+        });
+        
+      } catch (error) {
+        console.warn('⚠️ Erreur programmation email:', error.message);
+      }
+    }
+
     console.log('Réservation créée:', {
       id: savedReservation._id,
       customer: `${normalizedCustomer.firstName} ${normalizedCustomer.lastName}`,
       dateTime: reservationDate
     });
 
+    // ✅ MODIFICATION : Message de réponse adapté
     res.status(201).json({
       success: true,
-      message: 'Réservation créée avec succès',
+      message: normalizedCustomer.email 
+        ? 'Réservation créée avec succès. Un email de confirmation vous sera envoyé.'
+        : 'Réservation créée avec succès.',
       data: { reservation: savedReservation }
     });
 
@@ -851,6 +867,7 @@ exports.deleteReservation = async (req, res) => {
 
 /**
  * Gère les actions selon le changement de statut
+ * ✅ MODIFICATION : Intégration Brevo avec paramètres corrects
  */
 const handleStatusChange = async (reservation, oldStatus, newStatus, reason) => {
   try {
@@ -858,10 +875,15 @@ const handleStatusChange = async (reservation, oldStatus, newStatus, reason) => 
 
     switch (newStatus) {
       case 'confirmed':
-        // Envoyer email de confirmation
+        // ✅ MODIFICATION : Envoyer email de confirmation avec paramètres corrects
         try {
-          if (emailService.sendReservationConfirmation) {
-            const emailResult = await emailService.sendReservationConfirmation(reservation);
+          const customerInfo = {
+            email: reservation.customer.email,
+            name: `${reservation.customer.firstName} ${reservation.customer.lastName}`.trim()
+          };
+          
+          if (customerInfo.email) {
+            const emailResult = await emailService.sendReservationConfirmation(reservation, customerInfo);
             console.log('Email confirmation:', emailResult.success ? 'envoyé' : 'échec');
           }
         } catch (emailError) {
@@ -893,10 +915,15 @@ const handleStatusChange = async (reservation, oldStatus, newStatus, reason) => 
 
       case 'cancelled':
       case 'no_show':
-        // Envoyer email d'annulation et libérer la table
+        // ✅ MODIFICATION : Envoyer email d'annulation avec paramètres corrects
         try {
-          if (emailService.sendReservationCancellation) {
-            const emailResult = await emailService.sendReservationCancellation(reservation, reason);
+          const customerInfo = {
+            email: reservation.customer.email,
+            name: `${reservation.customer.firstName} ${reservation.customer.lastName}`.trim()
+          };
+          
+          if (customerInfo.email) {
+            const emailResult = await emailService.sendReservationCancellation(reservation, customerInfo, reason);
             console.log('Email annulation:', emailResult.success ? 'envoyé' : 'échec');
           }
         } catch (emailError) {

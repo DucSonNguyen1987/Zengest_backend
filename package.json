@@ -83,6 +83,7 @@
   },
   "homepage": "https://github.com/zengest/backend#readme",
   "dependencies": {
+    "@getbrevo/brevo": "^2.2.0",
     "agenda": "^5.0.0",
     "bcryptjs": "^3.0.2",
     "compression": "^1.7.4",

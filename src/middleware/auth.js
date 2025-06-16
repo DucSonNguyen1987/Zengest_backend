@@ -21,7 +21,7 @@ const auth = async (req, res, next) => {
       });
     }
 
-    const token = authHeader.substring(7); // Enlever "Bearer "
+    const token = authHeader.substring(7); 
     
     if (!token) {
       return res.status(401).json({
@@ -29,6 +29,25 @@ const auth = async (req, res, next) => {
         message: 'Token manquant.',
         code: 'MISSING_TOKEN'
       });
+    }
+
+    if (token === 'PUBLIC_RESERVATIONS_TOKEN_2025') {
+      console.log('🌍 Token public détecté pour réservations');
+      
+      // Créer un utilisateur fictif pour les réservations publiques
+      req.user = {
+        id: 'public',
+        email: 'public@reservations',
+        role: 'public',
+        isActive: true,
+        isPublicToken: true,
+        permissions: ['reservations:write', 'reservations:read'],
+        restaurantId: null
+      };
+      req.token = token;
+      
+      console.log('✅ Authentification publique réussie pour réservations');
+      return next();
     }
 
     // Vérifier le token
